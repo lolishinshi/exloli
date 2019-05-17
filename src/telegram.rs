@@ -22,7 +22,7 @@ impl Bot {
                 "https://api.telegram.org/bot{}/sendMessage",
                 self.token,
             ))
-            .query(&[("chat_id", chat_id), ("text", text)])
+            .query(&[("chat_id", chat_id), ("text", text), ("parse_mode", "HTML")])
             .send()?;
         let json = json::parse(&response.text()?)?;
         if json["ok"] == true {

@@ -11,10 +11,15 @@ use crate::{
 };
 use chrono::{prelude::*, Duration};
 use failure::Error;
+use rayon::prelude::*;
 use std::{
     fs,
     io::{Read, Write},
     path,
+    sync::{
+        atomic::{AtomicU32, Ordering::SeqCst},
+        Arc,
+    },
 };
 
 mod config;
@@ -60,14 +65,21 @@ fn run() -> Result<(), Error> {
         gallery.rating.push_str(&rating);
         gallery.fav_cnt.push_str(&fav_cnt);
 
-        for (idx, url) in img_pages.iter().enumerate() {
-            info!("{} / {} 张图片", idx + 1, img_pages.len());
-            let img_url = exhentai.get_image_url(url)?;
-            debug!("图片地址: {}", img_url);
-            gallery
-                .img_urls
-                .push(upload_by_url(&img_url)?[0].src.to_owned());
-        }
+        // 多线程爬取图片并上传至 telegraph
+        let i = Arc::new(AtomicU32::new(0));
+        let img_urls = img_pages
+            .par_iter()
+            .map(|url| {
+                let now = i.load(SeqCst);
+                info!("第 {} / {} 张图片", now + 1, img_pages.len());
+                i.store(now + 1, SeqCst);
+                exhentai
+                    .get_image_url(url)
+                    .and_then(|img_url| upload_by_url(&img_url))
+                    .map(|result| result[0].src.to_owned())
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        gallery.img_urls.extend(img_urls);
 
         let content = gallery
             .img_urls
@@ -87,8 +99,8 @@ fn run() -> Result<(), Error> {
         bot.send_message(
             &config.telegram.channel_id,
             &format!(
-                "评分: {}\n收藏数: {}\n{}",
-                gallery.rating, gallery.fav_cnt, article_url
+                "评分: {}\n收藏数: {}\n地址: <code>{}</code>\n<a href=\"{}\">{}</a>",
+                gallery.rating, gallery.fav_cnt, gallery.url, article_url, gallery.title
             ),
         )?;
 
