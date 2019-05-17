@@ -1,5 +1,5 @@
 use failure::Error;
-use reqwest::{multipart::Form, Client};
+use reqwest::{multipart::Form, Client, StatusCode};
 use serde::Deserialize;
 use std::io;
 use tempfile::NamedTempFile;
@@ -15,18 +15,22 @@ pub struct UploadResult {
 pub fn upload_by_url(url: &str) -> Result<Vec<UploadResult>, Error> {
     let client = Client::new();
     // 下载图片
+    debug!("下载图片: {}", url);
     let mut file = NamedTempFile::new()?;
     let mut response = client.get(url).send()?;
     io::copy(&mut response, &mut file)?;
 
     // 上传图片
+    debug!("上传图片: {:?}", file.path());
     let form = Form::new().file("file", file.path())?;
     let mut response = client
         .post("https://telegra.ph/upload")
         .multipart(form)
         .send()?;
+    let json = response.json()?;
+    debug!("结果: {:?}", json);
 
-    Ok(response.json()?)
+    Ok(json)
 }
 
 /// 发布文章, 返回文章地址
@@ -40,8 +44,8 @@ pub fn publish_article(
     let client = Client::new();
 
     let mut response = client
-        .get("https://api.telegra.ph/createPage")
-        .query(&[
+        .post("https://api.telegra.ph/createPage")
+        .form(&[
             ("access_token", access_token),
             ("title", title),
             ("author_name", author_name),
@@ -49,7 +53,11 @@ pub fn publish_article(
             ("content", content),
         ])
         .send()?;
-    let json = json::parse(&response.text()?)?;
+    let text = response.text()?;
+    if response.status() != StatusCode::OK {
+        return Err(format_err!("{}", text));
+    }
+    let json = json::parse(&text)?;
     Ok(json["result"]["url"].to_string())
 }
 

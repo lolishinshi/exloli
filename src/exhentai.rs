@@ -72,7 +72,7 @@ impl ExHentai {
     /// FIXME: 需要 search 一次后才能够正常访问 gallery 页面
     pub fn new(username: &str, password: &str) -> Result<Self, Error> {
         let client = ClientBuilder::new().cookie_store(true).build()?;
-
+        info!("登录表站...");
         // 登录表站, 获得 cookie
         let response = client
             .post("https://forums.e-hentai.org/index.php")
@@ -94,6 +94,7 @@ impl ExHentai {
             ));
         }
 
+        info!("登录里站...");
         // 访问里站, 取得必要的 cookie
         let response = client
             .get("https://exhentai.org")
@@ -111,11 +112,13 @@ impl ExHentai {
 
     /// 搜索指定关键字
     pub fn search(&self, keyword: &str, page: i32) -> Result<Vec<Gallery>, Error> {
+        debug!("搜索 {} - {}", keyword, page);
         let mut response = self
             .client
             .get("https://exhentai.org")
             .query(&[("f_search", keyword), ("page", &page.to_string())])
             .send()?;
+        debug!("状态码: {}", response.status());
         let html = parse_html(response.text()?)?;
 
         let gallery_list = html
@@ -130,11 +133,13 @@ impl ExHentai {
                 .into_text()
                 .unwrap()
                 .swap_remove(0);
+            debug!("标题: {}", title);
             let url = gallery
                 .xpath(r#".//td[@class="gl3c glname"]/a/@href"#)?
                 .into_text()
                 .unwrap()
                 .swap_remove(0);
+            debug!("地址: {}", url);
             let post_time = Local
                 .datetime_from_str(
                     &gallery
@@ -144,6 +149,7 @@ impl ExHentai {
                     "%Y-%m-%d %H:%M",
                 )
                 .expect("解析时间失败");
+            debug!("发布时间: {}", post_time);
             ret.push(Gallery {
                 title,
                 url,
@@ -158,24 +164,30 @@ impl ExHentai {
     }
 
     pub fn get_gallery(&self, url: &str) -> Result<(String, String, Vec<String>), Error> {
+        debug!("获取画廊信息: {}", url);
         let mut response = self.client.get(url).send()?;
+        debug!("状态码: {}", response.status());
         let mut html = parse_html(response.text()?)?;
 
         let rating = html
             .xpath(r#"//td[@id="rating_label"]/text()"#)?
             .into_text()
-            .unwrap()
-            .swap_remove(0)
+            .unwrap()[0]
             .split(' ')
             .skip(1)
             .next()
             .unwrap()
             .to_owned();
+        debug!("评分: {}", rating);
         let fav_cnt = html
             .xpath(r#"//td[@id="favcount"]/text()"#)?
             .into_text()
+            .unwrap()[0]
+            .split(' ')
+            .next()
             .unwrap()
-            .swap_remove(0);
+            .to_owned();
+        debug!("收藏数: {}", fav_cnt);
         let mut img_pages = html
             .xpath(r#"//div[@class="gdtl"]/a/@href"#)?
             .into_text()

@@ -1,3 +1,8 @@
+#[macro_use]
+extern crate log;
+#[macro_use]
+extern crate failure;
+
 use crate::{
     config::Config,
     exhentai::{ExHentai, Gallery},
@@ -20,7 +25,7 @@ mod xpath;
 
 fn run() -> Result<(), Error> {
     let config = Config::new("config.toml")?;
-    println!("登录中...");
+    info!("登录中...");
     let bot = Bot::new(&config.telegram.token);
     let exhentai = ExHentai::new(&config.exhentai.username, &config.exhentai.password)?;
 
@@ -47,8 +52,8 @@ fn run() -> Result<(), Error> {
         .collect::<Vec<Gallery>>();
 
     for gallery in galleries.into_iter().rev() {
-        println!("画廊名称: {}", gallery.title);
-        println!("画廊地址: {}", gallery.url);
+        info!("画廊名称: {}", gallery.title);
+        info!("画廊地址: {}", gallery.url);
 
         let mut gallery = gallery;
         let (rating, fav_cnt, img_pages) = exhentai.get_gallery(&gallery.url)?;
@@ -56,8 +61,9 @@ fn run() -> Result<(), Error> {
         gallery.fav_cnt.push_str(&fav_cnt);
 
         for (idx, url) in img_pages.iter().enumerate() {
-            println!("{} / {} 张图片", idx + 1, img_pages.len());
+            info!("{} / {} 张图片", idx + 1, img_pages.len());
             let img_url = exhentai.get_image_url(url)?;
+            debug!("图片地址: {}", img_url);
             gallery
                 .img_urls
                 .push(upload_by_url(&img_url)?[0].src.to_owned());
@@ -69,7 +75,7 @@ fn run() -> Result<(), Error> {
             .map(|s| format!(r#"{{ "tag":"img", "attrs":{{ "src": "{}" }} }}"#, s))
             .collect::<Vec<_>>()
             .join(",");
-
+        info!("发布文章");
         let article_url = publish_article(
             &config.telegraph.access_token,
             &gallery.title,
@@ -77,10 +83,13 @@ fn run() -> Result<(), Error> {
             &config.telegraph.author_url,
             &format!("[{}]", content),
         )?;
-        println!("文章地址: {}", article_url);
+        info!("文章地址: {}", article_url);
         bot.send_message(
             &config.telegram.channel_id,
-            &format!("评分: {}\n收藏数: {}\n{}", gallery.rating, gallery.fav_cnt, article_url),
+            &format!(
+                "评分: {}\n收藏数: {}\n{}",
+                gallery.rating, gallery.fav_cnt, article_url
+            ),
         )?;
 
         fs::File::create("./LAST_TIME")?.write_all(gallery.post_time.to_rfc3339().as_bytes())?;
@@ -90,6 +99,8 @@ fn run() -> Result<(), Error> {
 }
 
 fn main() {
+    env_logger::init();
+
     match run() {
         Ok(()) => (),
         Err(e) => eprintln!("{}", e),
