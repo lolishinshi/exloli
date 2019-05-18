@@ -7,41 +7,25 @@ use reqwest::{
     Client, ClientBuilder, StatusCode,
 };
 
-lazy_static! {
-    static ref HEADERS: HeaderMap = {
+macro_rules! set_header {
+    ($($k:ident => $v:expr), *) => {{
         let mut headers = HeaderMap::new();
-        headers.insert(
-            header::ACCEPT,
-            HeaderValue::from_static(
-                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            ),
-        );
-        headers.insert(
-            header::ACCEPT_ENCODING,
-            HeaderValue::from_static("gzip, deflate, br"),
-        );
-        headers.insert(
-            header::ACCEPT_LANGUAGE,
-            HeaderValue::from_static("zh-CN,en-US;q=0.7,en;q=0.3"),
-        );
-        headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("max-age=0"));
-        headers.insert(header::DNT, HeaderValue::from_static("1"));
-        headers.insert(header::HOST, HeaderValue::from_static("exhentai.org"));
-        headers.insert(
-            header::REFERER,
-            HeaderValue::from_static("https://exhentai.org/"),
-        );
-        headers.insert(
-            header::UPGRADE_INSECURE_REQUESTS,
-            HeaderValue::from_static("1"),
-        );
-        headers.insert(
-            header::USER_AGENT,
-            HeaderValue::from_static(
-                "Mozilla/5.0 (X11; Linux x86_64; rv:66.0) Gecko/20100101 Firefox/66.0",
-            ),
-        );
+        $(headers.insert(header::$k, HeaderValue::from_static($v));)*
         headers
+    }};
+}
+
+lazy_static! {
+    static ref HEADERS: HeaderMap = set_header!{
+        ACCEPT => "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        ACCEPT_ENCODING => "gzip, deflate, br",
+        ACCEPT_LANGUAGE => "zh-CN,en-US;q=0.7,en;q=0.3",
+        CACHE_CONTROL => "max-age=0",
+        DNT => "1",
+        HOST => "exhentai.org",
+        REFERER => "https://exhentai.org/",
+        UPGRADE_INSECURE_REQUESTS => "1",
+        USER_AGENT => "Mozilla/5.0 (X11; Linux x86_64; rv:66.0) Gecko/20100101 Firefox/66.0"
     };
 }
 
@@ -174,8 +158,7 @@ impl ExHentai {
             .into_text()
             .unwrap()[0]
             .split(' ')
-            .skip(1)
-            .next()
+            .nth(1)
             .unwrap()
             .to_owned();
         debug!("评分: {}", rating);
@@ -197,6 +180,7 @@ impl ExHentai {
             .xpath(r#"//table[@class="ptt"]//td[last()]/a/@href"#)?
             .into_text()
         {
+            debug!("下一页: {:?}", next_page);
             let mut response = self.client.get(&next_page.swap_remove(0)).send()?;
             html = parse_html(response.text()?)?;
             img_pages.extend(
@@ -210,7 +194,9 @@ impl ExHentai {
 
     /// 根据图片页面的 URL 获取图片的真实地址
     pub fn get_image_url(&self, url: &str) -> Result<String, Error> {
+        debug!("获取图片真实地址");
         let mut response = self.client.get(url).send()?;
+        debug!("状态码: {}", response.status());
         let html = parse_html(response.text()?)?;
         Ok(html
             .xpath(r#"//img[@id="img"]/@src"#)?

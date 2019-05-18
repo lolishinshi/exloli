@@ -15,11 +15,12 @@ use rayon::prelude::*;
 use std::{
     fs,
     io::{Read, Write},
-    path,
     sync::{
         atomic::{AtomicU32, Ordering::SeqCst},
         Arc,
     },
+    thread::sleep,
+    time,
 };
 
 mod config;
@@ -28,8 +29,7 @@ mod telegram;
 mod telegraph;
 mod xpath;
 
-fn run() -> Result<(), Error> {
-    let config = Config::new("config.toml")?;
+fn run(config: &Config) -> Result<(), Error> {
     info!("登录中...");
     let bot = Bot::new(&config.telegram.token);
     let exhentai = ExHentai::new(&config.exhentai.username, &config.exhentai.password)?;
@@ -40,18 +40,18 @@ fn run() -> Result<(), Error> {
         exhentai.search(&config.exhentai.keyword, page).ok()
     });
 
-    let last_time = if path::Path::new("./LAST_TIME").exists() {
+    let last_time = if std::path::Path::new("./LAST_TIME").exists() {
         let mut s = String::new();
         fs::File::open("./LAST_TIME")?.read_to_string(&mut s)?;
         s.parse::<DateTime<Local>>()?
     } else {
-        // 默认从一天前开始
-        Local::now() - Duration::days(1)
+        // 默认从两天前开始
+        Local::now() - Duration::days(2)
     };
+    debug!("截止时间: {:?}", last_time);
 
     let galleries = galleries
         .flatten()
-        .into_iter()
         // FIXME: 由于时间只精确到分钟, 此处存在极小的忽略掉本子的可能性
         .take_while(|gallery| gallery.post_time > last_time)
         .collect::<Vec<Gallery>>();
@@ -73,12 +73,21 @@ fn run() -> Result<(), Error> {
                 let now = i.load(SeqCst);
                 info!("第 {} / {} 张图片", now + 1, img_pages.len());
                 i.store(now + 1, SeqCst);
-                exhentai
-                    .get_image_url(url)
-                    .and_then(|img_url| upload_by_url(&img_url))
-                    .map(|result| result[0].src.to_owned())
+                loop {
+                    let img_url = exhentai
+                        .get_image_url(url)
+                        .and_then(|img_url| upload_by_url(&img_url))
+                        .map(|result| result["src"].to_string());
+                    match img_url {
+                        Ok(v) => break Ok(v),
+                        Err(e) => {
+                            error!("获取图片地址失败: {}", e);
+                            sleep(time::Duration::from_secs(10));
+                        },
+                    }
+                }
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<String>, Error>>()?;
         gallery.img_urls.extend(img_urls);
 
         let content = gallery
@@ -88,13 +97,23 @@ fn run() -> Result<(), Error> {
             .collect::<Vec<_>>()
             .join(",");
         info!("发布文章");
-        let article_url = publish_article(
-            &config.telegraph.access_token,
-            &gallery.title,
-            &config.telegraph.author_name,
-            &config.telegraph.author_url,
-            &format!("[{}]", content),
-        )?;
+
+        let article_url = loop {
+            let result = publish_article(
+                &config.telegraph.access_token,
+                &gallery.title,
+                &config.telegraph.author_name,
+                &config.telegraph.author_url,
+                &format!("[{}]", content),
+            );
+            match result {
+                Ok(v) => break v,
+                Err(e) => {
+                    eprintln!("发布文章失败: {}", e);
+                    sleep(time::Duration::from_secs(10));
+                }
+            }
+        };
         info!("文章地址: {}", article_url);
         bot.send_message(
             &config.telegram.channel_id,
@@ -111,10 +130,31 @@ fn run() -> Result<(), Error> {
 }
 
 fn main() {
+    let config = Config::new("config.toml").unwrap_or_else(|e| {
+        eprintln!("配置文件解析失败:\n{}", e);
+        std::process::exit(1);
+    });
+
+    // 设置相关环境变量
+    if let Some(log_level) = config.log_level.as_ref() {
+        std::env::set_var("RUST_LOG", format!("exloli={}", log_level));
+    }
+    if let Some(threads_num) = config.threads_num.as_ref() {
+        std::env::set_var("RAYON_NUM_THREADS", threads_num);
+    }
+
     env_logger::init();
 
-    match run() {
-        Ok(()) => (),
-        Err(e) => eprintln!("{}", e),
+    loop {
+        match run(&config) {
+            Ok(()) => {
+                info!("任务完成!");
+                return;
+            }
+            Err(e) => {
+                error!("任务出错: {}", e);
+                sleep(time::Duration::from_secs(60));
+            },
+        }
     }
 }

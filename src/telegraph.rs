@@ -1,18 +1,11 @@
 use failure::Error;
+use json::JsonValue;
 use reqwest::{multipart::Form, Client, StatusCode};
-use serde::Deserialize;
 use std::io;
 use tempfile::NamedTempFile;
 
-/// 图片上传结果
-#[derive(Debug, Deserialize)]
-pub struct UploadResult {
-    /// 图片 URL, 为相对 "telegra.ph" 的地址
-    pub src: String,
-}
-
 /// 通过 URL 上传图片至 telegraph
-pub fn upload_by_url(url: &str) -> Result<Vec<UploadResult>, Error> {
+pub fn upload_by_url(url: &str) -> Result<JsonValue, Error> {
     let client = Client::new();
     // 下载图片
     debug!("下载图片: {}", url);
@@ -27,10 +20,10 @@ pub fn upload_by_url(url: &str) -> Result<Vec<UploadResult>, Error> {
         .post("https://telegra.ph/upload")
         .multipart(form)
         .send()?;
-    let json = response.json()?;
-    debug!("结果: {:?}", json);
+    let json = json::parse(&response.text()?)?;
+    debug!("结果: {}", json);
 
-    Ok(json)
+    Ok(json[0].clone())
 }
 
 /// 发布文章, 返回文章地址
@@ -58,6 +51,9 @@ pub fn publish_article(
         return Err(format_err!("{}", text));
     }
     let json = json::parse(&text)?;
+    if json["result"]["url"] == JsonValue::Null {
+        return Err(format_err!("发布文章失败: {}", json));
+    }
     Ok(json["result"]["url"].to_string())
 }
 

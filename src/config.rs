@@ -4,6 +4,8 @@ use std::{fs::File, io::Read, path::Path};
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
+    pub log_level: Option<String>,
+    pub threads_num: Option<String>,
     pub exhentai: ExHentai,
     pub telegraph: Telegraph,
     pub telegram: Telegram,
