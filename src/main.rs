@@ -7,7 +7,7 @@ use crate::{
     config::Config,
     exhentai::{ExHentai, Gallery},
     telegram::Bot,
-    telegraph::{publish_article, upload_by_url},
+    telegraph::Telegraph,
 };
 use chrono::{prelude::*, Duration};
 use failure::Error;
@@ -33,6 +33,7 @@ fn run(config: &Config) -> Result<(), Error> {
     info!("登录中...");
     let bot = Bot::new(&config.telegram.token);
     let exhentai = ExHentai::new(&config.exhentai.username, &config.exhentai.password)?;
+    let telegraph = Telegraph::new(&config.telegraph.access_token);
 
     let mut page = -1;
     let galleries = std::iter::from_fn(|| {
@@ -76,7 +77,7 @@ fn run(config: &Config) -> Result<(), Error> {
                 loop {
                     let img_url = exhentai
                         .get_image_url(url)
-                        .and_then(|img_url| upload_by_url(&img_url))
+                        .and_then(|img_url| Telegraph::upload_by_url(&img_url))
                         .map(|result| result["src"].to_string());
                     match img_url {
                         Ok(v) => break Ok(v),
@@ -99,15 +100,12 @@ fn run(config: &Config) -> Result<(), Error> {
         info!("发布文章");
 
         let article_url = loop {
-            let result = publish_article(
-                &config.telegraph.access_token,
-                &gallery.title,
-                &config.telegraph.author_name,
-                &config.telegraph.author_url,
-                &format!("[{}]", content),
-            );
+            let result = telegraph.create_page(&gallery.title, &format!("[{}]", content))
+                .author_name(&config.telegraph.author_name)
+                .author_url(&config.telegraph.author_url)
+                .publish();
             match result {
-                Ok(v) => break v,
+                Ok(v) => break v["url"].to_string(),
                 Err(e) => {
                     eprintln!("发布文章失败: {}", e);
                     sleep(time::Duration::from_secs(10));

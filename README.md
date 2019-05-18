@@ -1,6 +1,6 @@
 # exloli
 
-从 E 站下载指定关键词的画(ben)廊(zi)并上传到 Telegraph 并发布到 Telegram 频道
+从 E 站里站下载指定关键词的画(ben)廊(zi)并上传到 Telegraph 并发布到 Telegram 频道
 
 ## 用法
 
@@ -12,9 +12,9 @@
 模板如下
 
 ```toml
-# 日志等级, 可选 INFO, DEBUG, ERROR
+# [可选] 日志等级, 可选 INFO, DEBUG, ERROR. 默认误
 log_level = "INFO"
-# 抓取线程
+# [可选] 抓取线程. 默认 CPU 核数
 threads_num = "4"
 
 [exhentai]
