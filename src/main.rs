@@ -146,9 +146,10 @@ fn run(config: &Config) -> Result<(), Error> {
         bot.send_message(
             &config.telegram.channel_id,
             &format!(
-                "地址: <code>{}</code>\n标签:\n{}\n<a href=\"{}\">{}</a>",
-                gallery.url, tags, article_url, gallery.title
+                "{}\n<a href=\"{}\">{}</a>",
+                tags, article_url, gallery.title
             ),
+            &gallery.url,
         )?;
 
         fs::File::create("./LAST_TIME")?.write_all(gallery.post_time.to_rfc3339().as_bytes())?;
