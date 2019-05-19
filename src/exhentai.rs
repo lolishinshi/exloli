@@ -6,6 +6,7 @@ use reqwest::{
     header::{self, HeaderMap, HeaderValue},
     Client, ClientBuilder, StatusCode,
 };
+use std::collections::HashMap;
 
 macro_rules! set_header {
     ($($k:ident => $v:expr), *) => {{
@@ -16,7 +17,7 @@ macro_rules! set_header {
 }
 
 lazy_static! {
-    static ref HEADERS: HeaderMap = set_header!{
+    static ref HEADERS: HeaderMap = set_header! {
         ACCEPT => "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         ACCEPT_ENCODING => "gzip, deflate, br",
         ACCEPT_LANGUAGE => "zh-CN,en-US;q=0.7,en;q=0.3",
@@ -42,6 +43,8 @@ pub struct Gallery {
     pub rating: String,
     /// 收藏次数
     pub fav_cnt: String,
+    /// 标签
+    pub tags: HashMap<String, Vec<String>>,
     /// 图片 URL
     pub img_urls: Vec<String>,
 }
@@ -53,7 +56,6 @@ pub struct ExHentai {
 
 impl ExHentai {
     /// 登录 E-Hentai (能够访问 ExHentai 的前置条件
-    /// FIXME: 需要 search 一次后才能够正常访问 gallery 页面
     pub fn new(username: &str, password: &str) -> Result<Self, Error> {
         let client = ClientBuilder::new().cookie_store(true).build()?;
         info!("登录表站...");
@@ -105,31 +107,23 @@ impl ExHentai {
         debug!("状态码: {}", response.status());
         let html = parse_html(response.text()?)?;
 
-        let gallery_list = html
-            .xpath(r#"//table[@class="itg gltc"]/tr[position() > 1]"#)?
-            .into_element()
-            .unwrap();
+        let gallery_list = html.xpath_elem(r#"//table[@class="itg gltc"]/tr[position() > 1]"#)?;
 
         let mut ret = vec![];
         for gallery in gallery_list {
             let title = gallery
-                .xpath(r#".//td[@class="gl3c glname"]/a/div/text()"#)?
-                .into_text()
-                .unwrap()
+                .xpath_text(r#".//td[@class="gl3c glname"]/a/div/text()"#)?
                 .swap_remove(0);
             debug!("标题: {}", title);
             let url = gallery
-                .xpath(r#".//td[@class="gl3c glname"]/a/@href"#)?
-                .into_text()
-                .unwrap()
+                .xpath_text(r#".//td[@class="gl3c glname"]/a/@href"#)?
                 .swap_remove(0);
             debug!("地址: {}", url);
             let post_time = Local
                 .datetime_from_str(
-                    &gallery
-                        .xpath(r#".//td[@class="gl2c"]//div[contains(@id, "posted")]/text()"#)?
-                        .into_text()
-                        .unwrap()[0],
+                    &gallery.xpath_text(
+                        r#".//td[@class="gl2c"]//div[contains(@id, "posted")]/text()"#,
+                    )?[0],
                     "%Y-%m-%d %H:%M",
                 )
                 .expect("解析时间失败");
@@ -140,6 +134,7 @@ impl ExHentai {
                 post_time,
                 rating: String::new(),
                 fav_cnt: String::new(),
+                tags: HashMap::new(),
                 img_urls: vec![],
             })
         }
@@ -147,49 +142,49 @@ impl ExHentai {
         Ok(ret)
     }
 
-    pub fn get_gallery(&self, url: &str) -> Result<(String, String, Vec<String>), Error> {
+    pub fn get_gallery(
+        &self,
+        url: &str,
+    ) -> Result<(String, String, Vec<String>, HashMap<String, Vec<String>>), Error> {
         debug!("获取画廊信息: {}", url);
         let mut response = self.client.get(url).send()?;
         debug!("状态码: {}", response.status());
         let mut html = parse_html(response.text()?)?;
 
-        let rating = html
-            .xpath(r#"//td[@id="rating_label"]/text()"#)?
-            .into_text()
-            .unwrap()[0]
+        let mut tags = HashMap::new();
+
+        // get tags
+        for ele in html.xpath_elem(r#"//div[@id="taglist"]//tr"#)? {
+            let tag_set_name = ele.xpath_text(r#"./td[1]/text()"#)?[0]
+                .trim_matches(':')
+                .to_owned();
+            let tag = ele.xpath_text(r#"./td[2]/div/a/text()"#)?;
+            tags.insert(tag_set_name, tag);
+        }
+        debug!("tags: {:?}", tags);
+        let rating = html.xpath_text(r#"//td[@id="rating_label"]/text()"#)?[0]
             .split(' ')
             .nth(1)
             .unwrap()
             .to_owned();
         debug!("评分: {}", rating);
-        let fav_cnt = html
-            .xpath(r#"//td[@id="favcount"]/text()"#)?
-            .into_text()
-            .unwrap()[0]
+        let fav_cnt = html.xpath_text(r#"//td[@id="favcount"]/text()"#)?[0]
             .split(' ')
             .next()
             .unwrap()
             .to_owned();
         debug!("收藏数: {}", fav_cnt);
-        let mut img_pages = html
-            .xpath(r#"//div[@class="gdtl"]/a/@href"#)?
-            .into_text()
-            .unwrap();
+        let mut img_pages = html.xpath_text(r#"//div[@class="gdtl"]/a/@href"#)?;
 
-        while let Some(mut next_page) = html
-            .xpath(r#"//table[@class="ptt"]//td[last()]/a/@href"#)?
-            .into_text()
+        while let Ok(mut next_page) =
+            html.xpath_text(r#"//table[@class="ptt"]//td[last()]/a/@href"#)
         {
             debug!("下一页: {:?}", next_page);
             let mut response = self.client.get(&next_page.swap_remove(0)).send()?;
             html = parse_html(response.text()?)?;
-            img_pages.extend(
-                html.xpath(r#"//div[@class="gdtl"]/a/@href"#)?
-                    .into_text()
-                    .unwrap(),
-            )
+            img_pages.extend(html.xpath_text(r#"//div[@class="gdtl"]/a/@href"#)?)
         }
-        Ok((rating, fav_cnt, img_pages))
+        Ok((rating, fav_cnt, img_pages, tags))
     }
 
     /// 根据图片页面的 URL 获取图片的真实地址
@@ -198,11 +193,7 @@ impl ExHentai {
         let mut response = self.client.get(url).send()?;
         debug!("状态码: {}", response.status());
         let html = parse_html(response.text()?)?;
-        Ok(html
-            .xpath(r#"//img[@id="img"]/@src"#)?
-            .into_text()
-            .unwrap()
-            .swap_remove(0))
+        Ok(html.xpath_text(r#"//img[@id="img"]/@src"#)?.swap_remove(0))
     }
 }
 

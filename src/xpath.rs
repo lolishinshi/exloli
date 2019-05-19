@@ -50,6 +50,20 @@ impl fmt::Debug for Node {
 }
 
 impl Node {
+    pub fn xpath_text(&self, xpath: &str) -> Result<Vec<String>, Error> {
+        match self.xpath(xpath)?.into_text() {
+            Some(v) => Ok(v),
+            None => Err(format_err!("not found")),
+        }
+    }
+
+    pub fn xpath_elem(&self, xpath: &str) -> Result<Vec<Node>, Error> {
+        match self.xpath(xpath)?.into_element() {
+            Some(v) => Ok(v),
+            None => Err(format_err!("not found")),
+        }
+    }
+
     pub fn xpath(&self, xpath: &str) -> Result<Value, Error> {
         let nodes = self
             .context

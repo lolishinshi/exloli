@@ -9,6 +9,7 @@ use crate::{
 use chrono::{prelude::*, Duration};
 use failure::Error;
 use rayon::prelude::*;
+use reqwest::Client;
 use std::{
     fs,
     io::{self, Read, Write},
@@ -19,8 +20,7 @@ use std::{
     thread::sleep,
     time,
 };
-use telegraph_rs::{UploadResult, Telegraph};
-use reqwest::Client;
+use telegraph_rs::{Telegraph, UploadResult};
 use tempfile::NamedTempFile;
 
 mod config;
@@ -79,9 +79,10 @@ fn run(config: &Config) -> Result<(), Error> {
         info!("画廊地址: {}", gallery.url);
 
         let mut gallery = gallery;
-        let (rating, fav_cnt, img_pages) = exhentai.get_gallery(&gallery.url)?;
+        let (rating, fav_cnt, img_pages, tags) = exhentai.get_gallery(&gallery.url)?;
         gallery.rating.push_str(&rating);
         gallery.fav_cnt.push_str(&fav_cnt);
+        gallery.tags.extend(tags);
 
         // 多线程爬取图片并上传至 telegraph
         let i = Arc::new(AtomicU32::new(0));
@@ -101,7 +102,7 @@ fn run(config: &Config) -> Result<(), Error> {
                         Err(e) => {
                             error!("获取图片地址失败: {}", e);
                             sleep(time::Duration::from_secs(10));
-                        },
+                        }
                     }
                 }
             })
@@ -127,11 +128,26 @@ fn run(config: &Config) -> Result<(), Error> {
             }
         };
         info!("文章地址: {}", article_url);
+        let tags = gallery
+            .tags
+            .iter()
+            .map(|(k, v)| {
+                format!(
+                    "<code>{:>9}</code>: {}",
+                    k,
+                    v.iter()
+                        .map(|s| format!("#{}", s.replace(' ', "_")))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
         bot.send_message(
             &config.telegram.channel_id,
             &format!(
-                "评分: {}\n收藏数: {}\n地址: <code>{}</code>\n<a href=\"{}\">{}</a>",
-                gallery.rating, gallery.fav_cnt, gallery.url, article_url, gallery.title
+                "地址: <code>{}</code>\n标签:\n{}\n<a href=\"{}\">{}</a>",
+                gallery.url, tags, article_url, gallery.title
             ),
         )?;
 
@@ -166,7 +182,7 @@ fn main() {
             Err(e) => {
                 error!("任务出错: {}", e);
                 sleep(time::Duration::from_secs(60));
-            },
+            }
         }
     }
 }
