@@ -1,20 +1,17 @@
 #[macro_use]
 extern crate log;
-#[macro_use]
-extern crate failure;
 
 use crate::{
     config::Config,
     exhentai::{ExHentai, Gallery},
     telegram::Bot,
-    telegraph::Telegraph,
 };
 use chrono::{prelude::*, Duration};
 use failure::Error;
 use rayon::prelude::*;
 use std::{
     fs,
-    io::{Read, Write},
+    io::{self, Read, Write},
     sync::{
         atomic::{AtomicU32, Ordering::SeqCst},
         Arc,
@@ -22,18 +19,38 @@ use std::{
     thread::sleep,
     time,
 };
+use telegraph_rs::{UploadResult, Telegraph};
+use reqwest::Client;
+use tempfile::NamedTempFile;
 
 mod config;
 mod exhentai;
 mod telegram;
-mod telegraph;
 mod xpath;
+
+/// 通过 URL 上传图片至 telegraph
+pub fn upload_by_url(url: &str) -> Result<UploadResult, Error> {
+    let client = Client::new();
+    // 下载图片
+    debug!("下载图片: {}", url);
+    let mut file = NamedTempFile::new()?;
+    let mut response = client.get(url).send()?;
+    io::copy(&mut response, &mut file)?;
+
+    // 上传图片
+    debug!("上传图片: {:?}", file.path());
+    let result = Telegraph::upload(&[file.path()])?.swap_remove(0);
+    Ok(result)
+}
 
 fn run(config: &Config) -> Result<(), Error> {
     info!("登录中...");
     let bot = Bot::new(&config.telegram.token);
     let exhentai = ExHentai::new(&config.exhentai.username, &config.exhentai.password)?;
-    let telegraph = Telegraph::new(&config.telegraph.access_token);
+    let telegraph = telegraph_rs::Telegraph::new(&config.telegraph.author_name)
+        .author_url(&config.telegraph.author_url)
+        .access_token(&config.telegraph.access_token)
+        .create()?;
 
     let mut page = -1;
     let galleries = std::iter::from_fn(|| {
@@ -77,8 +94,8 @@ fn run(config: &Config) -> Result<(), Error> {
                 loop {
                     let img_url = exhentai
                         .get_image_url(url)
-                        .and_then(|img_url| Telegraph::upload_by_url(&img_url))
-                        .map(|result| result["src"].to_string());
+                        .and_then(|img_url| upload_by_url(&img_url))
+                        .map(|result| result.src.to_owned());
                     match img_url {
                         Ok(v) => break Ok(v),
                         Err(e) => {
@@ -100,12 +117,9 @@ fn run(config: &Config) -> Result<(), Error> {
         info!("发布文章");
 
         let article_url = loop {
-            let result = telegraph.create_page(&gallery.title, &format!("[{}]", content))
-                .author_name(&config.telegraph.author_name)
-                .author_url(&config.telegraph.author_url)
-                .publish();
+            let result = telegraph.create_page(&gallery.title, &format!("[{}]", content), false);
             match result {
-                Ok(v) => break v["url"].to_string(),
+                Ok(v) => break v.url.to_owned(),
                 Err(e) => {
                     eprintln!("发布文章失败: {}", e);
                     sleep(time::Duration::from_secs(10));
