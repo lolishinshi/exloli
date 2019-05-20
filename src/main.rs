@@ -11,6 +11,7 @@ use failure::Error;
 use rayon::prelude::*;
 use reqwest::Client;
 use std::{
+    collections::HashMap,
     fs,
     io::{self, Read, Write},
     sync::{
@@ -43,6 +44,72 @@ pub fn upload_by_url(url: &str) -> Result<UploadResult, Error> {
     Ok(result)
 }
 
+/// 将 tag 转换为可以直接发送至 tg 的文本格式
+fn tags_to_string(tags: &HashMap<String, Vec<String>>) -> String {
+    tags.iter()
+        .map(|(k, v)| {
+            let value = v
+                .iter()
+                .map(|s| format!("#{}", s.replace(' ', "_").replace("_|_", " #")))
+                .collect::<Vec<_>>()
+                .join(" ");
+            format!("<code>{:>9}</code>: {}", k, value)
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// 获取上一本爬取的本子的发布时间
+fn load_last_time() -> Result<DateTime<Local>, Error> {
+    if std::path::Path::new("./LAST_TIME").exists() {
+        let mut s = String::new();
+        fs::File::open("./LAST_TIME")?.read_to_string(&mut s)?;
+        Ok(s.parse::<DateTime<Local>>()?)
+    } else {
+        // 默认从两天前开始
+        Ok(Local::now() - Duration::days(2))
+    }
+}
+
+/// 将图片地址格式化为 html
+fn format_img_urls(img_urls: &[String]) -> String {
+    html_to_node(
+        &img_urls
+            .iter()
+            .map(|s| format!(r#"<img src="{}">"#, s))
+            .collect::<Vec<_>>()
+            .join(""),
+    )
+}
+
+/// 从图片页面地址获取图片原始地址
+fn get_img_urls(gallery: BasicGalleryInfo, img_pages: &[String]) -> Vec<String> {
+    let img_cnt = img_pages.len();
+    let idx = Arc::new(AtomicU32::new(0));
+
+    img_pages
+        .par_iter()
+        .map(|url| {
+            let now = idx.load(SeqCst);
+            info!("第 {} / {} 张图片", now + 1, img_cnt);
+            idx.store(now + 1, SeqCst);
+            loop {
+                let img_url = gallery
+                    .get_image_url(url)
+                    .and_then(|img_url| upload_by_url(&img_url))
+                    .map(|result| result.src);
+                match img_url {
+                    Ok(v) => break v,
+                    Err(e) => {
+                        error!("获取图片地址失败: {}", e);
+                        sleep(time::Duration::from_secs(10));
+                    }
+                }
+            }
+        })
+        .collect::<Vec<String>>()
+}
+
 fn run(config: &Config) -> Result<(), Error> {
     info!("登录中...");
     let bot = Bot::new(&config.telegram.token);
@@ -52,21 +119,16 @@ fn run(config: &Config) -> Result<(), Error> {
         .access_token(&config.telegraph.access_token)
         .create()?;
 
+    // 获取上一本本子的发布时间
+    let last_time = load_last_time()?;
+    debug!("截止时间: {:?}", last_time);
+
+    // generator 还未稳定, 用 from_fn + flatten 模拟一下
     let mut page = -1;
     let galleries = std::iter::from_fn(|| {
         page += 1;
         exhentai.search(&config.exhentai.keyword, page).ok()
     });
-
-    let last_time = if std::path::Path::new("./LAST_TIME").exists() {
-        let mut s = String::new();
-        fs::File::open("./LAST_TIME")?.read_to_string(&mut s)?;
-        s.parse::<DateTime<Local>>()?
-    } else {
-        // 默认从两天前开始
-        Local::now() - Duration::days(2)
-    };
-    debug!("截止时间: {:?}", last_time);
 
     let galleries = galleries
         .flatten()
@@ -74,54 +136,24 @@ fn run(config: &Config) -> Result<(), Error> {
         .take_while(|gallery| gallery.post_time > last_time)
         .collect::<Vec<BasicGalleryInfo>>();
 
+    // 从后往前爬, 防止半路失败导致进度记录错误
     for gallery in galleries.into_iter().rev() {
         info!("画廊名称: {}", gallery.title);
         info!("画廊地址: {}", gallery.url);
 
         let gallery_info = gallery.get_full_info()?;
 
-        // 多线程爬取图片并上传至 telegraph
-        let i = Arc::new(AtomicU32::new(0));
-        let img_urls = gallery_info
-            .img_pages
-            .par_iter()
-            .map(|url| {
-                let now = i.load(SeqCst);
-                info!(
-                    "第 {} / {} 张图片",
-                    now + 1,
-                    gallery_info.img_pages.len()
-                );
-                i.store(now + 1, SeqCst);
-                loop {
-                    let img_url = gallery
-                        .get_image_url(url)
-                        .and_then(|img_url| upload_by_url(&img_url))
-                        .map(|result| result.src.to_owned());
-                    match img_url {
-                        Ok(v) => break Ok(v),
-                        Err(e) => {
-                            error!("获取图片地址失败: {}", e);
-                            sleep(time::Duration::from_secs(10));
-                        }
-                    }
-                }
-            })
-            .collect::<Result<Vec<String>, Error>>()?;
+        let img_urls = get_img_urls(gallery, &gallery_info.img_pages);
 
-        let content = html_to_node(
-            &img_urls
-                .iter()
-                .map(|s| format!(r#"<img src="{}">"#, s))
-                .collect::<Vec<_>>()
-                .join(""),
-        );
+        let gallery = gallery_info;
+
+        let content = format_img_urls(&img_urls);
         info!("发布文章");
 
         let article_url = loop {
             let result = telegraph.create_page(&gallery.title, &content, false);
             match result {
-                Ok(v) => break v.url.to_owned(),
+                Ok(v) => break v.url,
                 Err(e) => {
                     error!("发布文章失败: {}", e);
                     sleep(time::Duration::from_secs(10));
@@ -129,22 +161,8 @@ fn run(config: &Config) -> Result<(), Error> {
             }
         };
         info!("文章地址: {}", article_url);
-        let tags = gallery_info
-            .tags
-            .iter()
-            .map(|(k, v)| {
-                format!(
-                    "<code>{:>9}</code>: {}",
-                    k,
-                    v.iter()
-                        // FIXME: tag 中可能含有 |
-                        .map(|s| format!("#{}", s.replace(' ', "_")))
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
+
+        let tags = tags_to_string(&gallery.tags);
         bot.send_message(
             &config.telegram.channel_id,
             &format!(
