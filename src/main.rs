@@ -113,7 +113,11 @@ fn get_img_urls(gallery: BasicGalleryInfo, img_pages: &[String]) -> Vec<String> 
 fn run(config: &Config) -> Result<(), Error> {
     info!("登录中...");
     let bot = Bot::new(&config.telegram.token);
-    let exhentai = ExHentai::new(&config.exhentai.username, &config.exhentai.password)?;
+    let exhentai = ExHentai::new(
+        &config.exhentai.username,
+        &config.exhentai.password,
+        config.exhentai.search_watched,
+    )?;
     let telegraph = telegraph_rs::Telegraph::new(&config.telegraph.author_name)
         .author_url(&config.telegraph.author_url)
         .access_token(&config.telegraph.access_token)

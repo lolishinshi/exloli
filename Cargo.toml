@@ -1,7 +1,7 @@
 [package]
 name = "exloli"
 description = "根据指定关键词从 E 站下载本子并上传到 telegraph 并发布到 Telegram 频道"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Aloxaf <aloxafx@gmail.com>"]
 edition = "2018"
 

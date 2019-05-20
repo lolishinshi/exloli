@@ -86,7 +86,7 @@ impl<'a> BasicGalleryInfo<'a> {
         Ok(FullGalleryInfo {
             title: self.title.clone(),
             url: self.url.clone(),
-            post_time: self.post_time.clone(),
+            post_time: self.post_time,
             rating,
             fav_cnt,
             img_pages,
@@ -126,11 +126,12 @@ pub struct FullGalleryInfo {
 #[derive(Debug)]
 pub struct ExHentai {
     client: Client,
+    search_page: String,
 }
 
 impl ExHentai {
     /// 登录 E-Hentai (能够访问 ExHentai 的前置条件
-    pub fn new(username: &str, password: &str) -> Result<Self, Error> {
+    pub fn new(username: &str, password: &str, search_watched: bool) -> Result<Self, Error> {
         let client = ClientBuilder::new().cookie_store(true).build()?;
         info!("登录表站...");
         // 登录表站, 获得 cookie
@@ -167,7 +168,14 @@ impl ExHentai {
             ));
         }
 
-        Ok(Self { client })
+        Ok(Self {
+            client,
+            search_page: if search_watched {
+                "https://exhentai.org/watched".to_owned()
+            } else {
+                "https://exhentai.org".to_owned()
+            },
+        })
     }
 
     /// 搜索指定关键字
@@ -175,7 +183,7 @@ impl ExHentai {
         debug!("搜索 {} - {}", keyword, page);
         let mut response = self
             .client
-            .get("https://exhentai.org")
+            .get(&self.search_page)
             .query(&[("f_search", keyword), ("page", &page.to_string())])
             .send()?;
         debug!("状态码: {}", response.status());
