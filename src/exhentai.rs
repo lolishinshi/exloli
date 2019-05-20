@@ -30,9 +30,83 @@ lazy_static! {
     };
 }
 
+/// 基本画廊信息
+#[derive(Debug)]
+pub struct BasicGalleryInfo<'a> {
+    client: &'a Client,
+    /// 画廊标题
+    pub title: String,
+    /// 画廊地址
+    pub url: String,
+    /// 发布时间,
+    pub post_time: DateTime<Local>,
+}
+
+impl<'a> BasicGalleryInfo<'a> {
+    pub fn get_full_info(&self) -> Result<FullGalleryInfo, Error> {
+        debug!("获取画廊信息: {}", self.url);
+        let mut response = self.client.get(&self.url).send()?;
+        debug!("状态码: {}", response.status());
+        let mut html = parse_html(response.text()?)?;
+
+        let mut tags = HashMap::new();
+
+        // get tags
+        for ele in html.xpath_elem(r#"//div[@id="taglist"]//tr"#)? {
+            let tag_set_name = ele.xpath_text(r#"./td[1]/text()"#)?[0]
+                .trim_matches(':')
+                .to_owned();
+            let tag = ele.xpath_text(r#"./td[2]/div/a/text()"#)?;
+            tags.insert(tag_set_name, tag);
+        }
+        debug!("tags: {:?}", tags);
+        let rating = html.xpath_text(r#"//td[@id="rating_label"]/text()"#)?[0]
+            .split(' ')
+            .nth(1)
+            .unwrap()
+            .to_owned();
+        debug!("评分: {}", rating);
+        let fav_cnt = html.xpath_text(r#"//td[@id="favcount"]/text()"#)?[0]
+            .split(' ')
+            .next()
+            .unwrap()
+            .to_owned();
+        debug!("收藏数: {}", fav_cnt);
+        let mut img_pages = html.xpath_text(r#"//div[@class="gdtl"]/a/@href"#)?;
+
+        while let Ok(mut next_page) =
+            html.xpath_text(r#"//table[@class="ptt"]//td[last()]/a/@href"#)
+        {
+            debug!("下一页: {:?}", next_page);
+            let mut response = self.client.get(&next_page.swap_remove(0)).send()?;
+            html = parse_html(response.text()?)?;
+            img_pages.extend(html.xpath_text(r#"//div[@class="gdtl"]/a/@href"#)?)
+        }
+
+        Ok(FullGalleryInfo {
+            title: self.title.clone(),
+            url: self.url.clone(),
+            post_time: self.post_time.clone(),
+            rating,
+            fav_cnt,
+            img_pages,
+            tags,
+        })
+    }
+
+    /// 根据图片页面的 URL 获取图片的真实地址
+    pub fn get_image_url(&self, url: &str) -> Result<String, Error> {
+        debug!("获取图片真实地址");
+        let mut response = self.client.get(url).send()?;
+        debug!("状态码: {}", response.status());
+        let html = parse_html(response.text()?)?;
+        Ok(html.xpath_text(r#"//img[@id="img"]/@src"#)?.swap_remove(0))
+    }
+}
+
 /// 画廊信息
 #[derive(Debug)]
-pub struct Gallery {
+pub struct FullGalleryInfo {
     /// 画廊标题
     pub title: String,
     /// 画廊地址
@@ -46,7 +120,7 @@ pub struct Gallery {
     /// 标签
     pub tags: HashMap<String, Vec<String>>,
     /// 图片 URL
-    pub img_urls: Vec<String>,
+    pub img_pages: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -97,7 +171,7 @@ impl ExHentai {
     }
 
     /// 搜索指定关键字
-    pub fn search(&self, keyword: &str, page: i32) -> Result<Vec<Gallery>, Error> {
+    pub fn search(&self, keyword: &str, page: i32) -> Result<Vec<BasicGalleryInfo>, Error> {
         debug!("搜索 {} - {}", keyword, page);
         let mut response = self
             .client
@@ -128,72 +202,15 @@ impl ExHentai {
                 )
                 .expect("解析时间失败");
             debug!("发布时间: {}", post_time);
-            ret.push(Gallery {
+            ret.push(BasicGalleryInfo {
+                client: &self.client,
                 title,
                 url,
                 post_time,
-                rating: String::new(),
-                fav_cnt: String::new(),
-                tags: HashMap::new(),
-                img_urls: vec![],
             })
         }
 
         Ok(ret)
-    }
-
-    pub fn get_gallery(
-        &self,
-        url: &str,
-    ) -> Result<(String, String, Vec<String>, HashMap<String, Vec<String>>), Error> {
-        debug!("获取画廊信息: {}", url);
-        let mut response = self.client.get(url).send()?;
-        debug!("状态码: {}", response.status());
-        let mut html = parse_html(response.text()?)?;
-
-        let mut tags = HashMap::new();
-
-        // get tags
-        for ele in html.xpath_elem(r#"//div[@id="taglist"]//tr"#)? {
-            let tag_set_name = ele.xpath_text(r#"./td[1]/text()"#)?[0]
-                .trim_matches(':')
-                .to_owned();
-            let tag = ele.xpath_text(r#"./td[2]/div/a/text()"#)?;
-            tags.insert(tag_set_name, tag);
-        }
-        debug!("tags: {:?}", tags);
-        let rating = html.xpath_text(r#"//td[@id="rating_label"]/text()"#)?[0]
-            .split(' ')
-            .nth(1)
-            .unwrap()
-            .to_owned();
-        debug!("评分: {}", rating);
-        let fav_cnt = html.xpath_text(r#"//td[@id="favcount"]/text()"#)?[0]
-            .split(' ')
-            .next()
-            .unwrap()
-            .to_owned();
-        debug!("收藏数: {}", fav_cnt);
-        let mut img_pages = html.xpath_text(r#"//div[@class="gdtl"]/a/@href"#)?;
-
-        while let Ok(mut next_page) =
-            html.xpath_text(r#"//table[@class="ptt"]//td[last()]/a/@href"#)
-        {
-            debug!("下一页: {:?}", next_page);
-            let mut response = self.client.get(&next_page.swap_remove(0)).send()?;
-            html = parse_html(response.text()?)?;
-            img_pages.extend(html.xpath_text(r#"//div[@class="gdtl"]/a/@href"#)?)
-        }
-        Ok((rating, fav_cnt, img_pages, tags))
-    }
-
-    /// 根据图片页面的 URL 获取图片的真实地址
-    pub fn get_image_url(&self, url: &str) -> Result<String, Error> {
-        debug!("获取图片真实地址");
-        let mut response = self.client.get(url).send()?;
-        debug!("状态码: {}", response.status());
-        let html = parse_html(response.text()?)?;
-        Ok(html.xpath_text(r#"//img[@id="img"]/@src"#)?.swap_remove(0))
     }
 }
 

@@ -3,7 +3,7 @@ extern crate log;
 
 use crate::{
     config::Config,
-    exhentai::{ExHentai, Gallery},
+    exhentai::{BasicGalleryInfo, ExHentai},
     telegram::Bot,
 };
 use chrono::{prelude::*, Duration};
@@ -20,7 +20,7 @@ use std::{
     thread::sleep,
     time,
 };
-use telegraph_rs::{Telegraph, UploadResult};
+use telegraph_rs::{html_to_node, Telegraph, UploadResult};
 use tempfile::NamedTempFile;
 
 mod config;
@@ -72,28 +72,29 @@ fn run(config: &Config) -> Result<(), Error> {
         .flatten()
         // FIXME: 由于时间只精确到分钟, 此处存在极小的忽略掉本子的可能性
         .take_while(|gallery| gallery.post_time > last_time)
-        .collect::<Vec<Gallery>>();
+        .collect::<Vec<BasicGalleryInfo>>();
 
     for gallery in galleries.into_iter().rev() {
         info!("画廊名称: {}", gallery.title);
         info!("画廊地址: {}", gallery.url);
 
-        let mut gallery = gallery;
-        let (rating, fav_cnt, img_pages, tags) = exhentai.get_gallery(&gallery.url)?;
-        gallery.rating.push_str(&rating);
-        gallery.fav_cnt.push_str(&fav_cnt);
-        gallery.tags.extend(tags);
+        let gallery_info = gallery.get_full_info()?;
 
         // 多线程爬取图片并上传至 telegraph
         let i = Arc::new(AtomicU32::new(0));
-        let img_urls = img_pages
+        let img_urls = gallery_info
+            .img_pages
             .par_iter()
             .map(|url| {
                 let now = i.load(SeqCst);
-                info!("第 {} / {} 张图片", now + 1, img_pages.len());
+                info!(
+                    "第 {} / {} 张图片",
+                    now + 1,
+                    gallery_info.img_pages.len()
+                );
                 i.store(now + 1, SeqCst);
                 loop {
-                    let img_url = exhentai
+                    let img_url = gallery
                         .get_image_url(url)
                         .and_then(|img_url| upload_by_url(&img_url))
                         .map(|result| result.src.to_owned());
@@ -107,28 +108,28 @@ fn run(config: &Config) -> Result<(), Error> {
                 }
             })
             .collect::<Result<Vec<String>, Error>>()?;
-        gallery.img_urls.extend(img_urls);
 
-        let content = gallery
-            .img_urls
-            .iter()
-            .map(|s| format!(r#"{{ "tag":"img", "attrs":{{ "src": "{}" }} }}"#, s))
-            .collect::<Vec<_>>()
-            .join(",");
+        let content = html_to_node(
+            &img_urls
+                .iter()
+                .map(|s| format!(r#"<img src="{}">"#, s))
+                .collect::<Vec<_>>()
+                .join(""),
+        );
         info!("发布文章");
 
         let article_url = loop {
-            let result = telegraph.create_page(&gallery.title, &format!("[{}]", content), false);
+            let result = telegraph.create_page(&gallery.title, &content, false);
             match result {
                 Ok(v) => break v.url.to_owned(),
                 Err(e) => {
-                    eprintln!("发布文章失败: {}", e);
+                    error!("发布文章失败: {}", e);
                     sleep(time::Duration::from_secs(10));
                 }
             }
         };
         info!("文章地址: {}", article_url);
-        let tags = gallery
+        let tags = gallery_info
             .tags
             .iter()
             .map(|(k, v)| {
@@ -136,6 +137,7 @@ fn run(config: &Config) -> Result<(), Error> {
                     "<code>{:>9}</code>: {}",
                     k,
                     v.iter()
+                        // FIXME: tag 中可能含有 |
                         .map(|s| format!("#{}", s.replace(' ', "_")))
                         .collect::<Vec<_>>()
                         .join(" ")
