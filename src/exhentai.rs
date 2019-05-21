@@ -43,15 +43,15 @@ pub struct BasicGalleryInfo<'a> {
 }
 
 impl<'a> BasicGalleryInfo<'a> {
+    /// 获取画廊的完整信息
     pub fn get_full_info(&self) -> Result<FullGalleryInfo, Error> {
         debug!("获取画廊信息: {}", self.url);
         let mut response = self.client.get(&self.url).send()?;
         debug!("状态码: {}", response.status());
         let mut html = parse_html(response.text()?)?;
 
+        // 标签
         let mut tags = HashMap::new();
-
-        // get tags
         for ele in html.xpath_elem(r#"//div[@id="taglist"]//tr"#)? {
             let tag_set_name = ele.xpath_text(r#"./td[1]/text()"#)?[0]
                 .trim_matches(':')
@@ -60,20 +60,27 @@ impl<'a> BasicGalleryInfo<'a> {
             tags.insert(tag_set_name, tag);
         }
         debug!("tags: {:?}", tags);
+
+        // 评分
         let rating = html.xpath_text(r#"//td[@id="rating_label"]/text()"#)?[0]
             .split(' ')
             .nth(1)
             .unwrap()
             .to_owned();
         debug!("评分: {}", rating);
+
+        // 收藏
         let fav_cnt = html.xpath_text(r#"//td[@id="favcount"]/text()"#)?[0]
             .split(' ')
             .next()
             .unwrap()
             .to_owned();
         debug!("收藏数: {}", fav_cnt);
+
+        // 图片页面
         let mut img_pages = html.xpath_text(r#"//div[@class="gdtl"]/a/@href"#)?;
 
+        // 继续翻页 (如果有
         while let Ok(mut next_page) =
             html.xpath_text(r#"//table[@class="ptt"]//td[last()]/a/@href"#)
         {
@@ -197,10 +204,12 @@ impl ExHentai {
                 .xpath_text(r#".//td[@class="gl3c glname"]/a/div/text()"#)?
                 .swap_remove(0);
             debug!("标题: {}", title);
+
             let url = gallery
                 .xpath_text(r#".//td[@class="gl3c glname"]/a/@href"#)?
                 .swap_remove(0);
             debug!("地址: {}", url);
+
             let post_time = Local
                 .datetime_from_str(
                     &gallery.xpath_text(
@@ -210,6 +219,7 @@ impl ExHentai {
                 )
                 .expect("解析时间失败");
             debug!("发布时间: {}", post_time);
+
             ret.push(BasicGalleryInfo {
                 client: &self.client,
                 title,
@@ -231,9 +241,13 @@ mod tests {
         color_backtrace::install();
 
         let config = Config::new("./config.toml").unwrap();
-        let exhentai = ExHentai::new(&config.exhentai.username, &config.exhentai.password).unwrap();
+        let exhentai = ExHentai::new(
+            &config.exhentai.username,
+            &config.exhentai.password,
+            config.exhentai.search_watched,
+        )
+        .unwrap();
 
-        // 必须先查询 ?
         for i in exhentai
             .search("female:lolicon language:Chinese", 0)
             .unwrap()

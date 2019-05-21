@@ -12,7 +12,6 @@ use rayon::prelude::*;
 use reqwest::Client;
 use std::{
     collections::HashMap,
-    fs,
     io::{self, Read, Write},
     sync::{
         atomic::{AtomicU32, Ordering::SeqCst},
@@ -63,7 +62,7 @@ fn tags_to_string(tags: &HashMap<String, Vec<String>>) -> String {
 fn load_last_time() -> Result<DateTime<Local>, Error> {
     if std::path::Path::new("./LAST_TIME").exists() {
         let mut s = String::new();
-        fs::File::open("./LAST_TIME")?.read_to_string(&mut s)?;
+        std::fs::File::open("./LAST_TIME")?.read_to_string(&mut s)?;
         Ok(s.parse::<DateTime<Local>>()?)
     } else {
         // 默认从两天前开始
@@ -72,14 +71,12 @@ fn load_last_time() -> Result<DateTime<Local>, Error> {
 }
 
 /// 将图片地址格式化为 html
-fn format_img_urls(img_urls: &[String]) -> String {
-    html_to_node(
-        &img_urls
-            .iter()
-            .map(|s| format!(r#"<img src="{}">"#, s))
-            .collect::<Vec<_>>()
-            .join(""),
-    )
+fn img_urls_to_html(img_urls: &[String]) -> String {
+    img_urls
+        .iter()
+        .map(|s| format!(r#"<img src="{}">"#, s))
+        .collect::<Vec<_>>()
+        .join("")
 }
 
 /// 从图片页面地址获取图片原始地址
@@ -147,15 +144,25 @@ fn run(config: &Config) -> Result<(), Error> {
 
         let gallery_info = gallery.get_full_info()?;
 
-        let img_urls = get_img_urls(gallery, &gallery_info.img_pages);
+        let max_length = gallery_info
+            .img_pages
+            .len()
+            .min(config.exhentai.max_img_cnt);
+        info!("保留图片数量: {}", max_length);
+        let img_urls = get_img_urls(gallery, &gallery_info.img_pages[..max_length]);
+
+        let mut content = img_urls_to_html(&img_urls);
+        if gallery_info.img_pages.len() > config.exhentai.max_img_cnt {
+            content.push_str(
+                r#"<p>图片数量过多, 只显示部分. 完整版请前往 E 站观看.</p>"#,
+            );
+        }
+        info!("发布文章");
 
         let gallery = gallery_info;
 
-        let content = format_img_urls(&img_urls);
-        info!("发布文章");
-
         let article_url = loop {
-            let result = telegraph.create_page(&gallery.title, &content, false);
+            let result = telegraph.create_page(&gallery.title, &html_to_node(&content), false);
             match result {
                 Ok(v) => break v.url,
                 Err(e) => {
@@ -176,7 +183,8 @@ fn run(config: &Config) -> Result<(), Error> {
             &gallery.url,
         )?;
 
-        fs::File::create("./LAST_TIME")?.write_all(gallery.post_time.to_rfc3339().as_bytes())?;
+        std::fs::File::create("./LAST_TIME")?
+            .write_all(gallery.post_time.to_rfc3339().as_bytes())?;
     }
 
     Ok(())

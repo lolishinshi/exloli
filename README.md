@@ -36,6 +36,8 @@ keyword = "female:lolicon language:Chinese"
 # 是否在 Watched 页面搜索 (默认在首页搜索
 # Watched 页面的搜索定制性更高 (当然前提是你定制了
 search_watched = false
+# 最大展示的图片数量
+max_img_cnt = 50
 
 [telegraph]
 # telegraph 账号 token

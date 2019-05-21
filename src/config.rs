@@ -17,6 +17,7 @@ pub struct ExHentai {
     pub password: String,
     pub keyword: String,
     pub search_watched: bool,
+    pub max_img_cnt: usize,
 }
 
 #[derive(Debug, Deserialize)]
