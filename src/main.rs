@@ -1,11 +1,7 @@
 #[macro_use]
 extern crate log;
 
-use crate::{
-    config::Config,
-    exhentai::{BasicGalleryInfo, ExHentai},
-    telegram::Bot,
-};
+use crate::{config::Config, exhentai::BasicGalleryInfo};
 use chrono::{prelude::*, Duration};
 use failure::Error;
 use rayon::prelude::*;
@@ -109,33 +105,13 @@ fn get_img_urls(gallery: BasicGalleryInfo, img_pages: &[String]) -> Vec<String> 
 
 fn run(config: &Config) -> Result<(), Error> {
     info!("登录中...");
-    let bot = Bot::new(&config.telegram.token);
-    let exhentai = ExHentai::new(
-        &config.exhentai.username,
-        &config.exhentai.password,
-        config.exhentai.search_watched,
-    )?;
-    let telegraph = telegraph_rs::Telegraph::new(&config.telegraph.author_name)
-        .author_url(&config.telegraph.author_url)
-        .access_token(&config.telegraph.access_token)
-        .create()?;
+    let bot = config.init_telegram();
+    let exhentai = config.init_exhentai()?;
+    let telegraph = config.init_telegraph()?;
 
-    // 获取上一本本子的发布时间
+    // 筛选最新本子
     let last_time = load_last_time()?;
-    debug!("截止时间: {:?}", last_time);
-
-    // generator 还未稳定, 用 from_fn + flatten 模拟一下
-    let mut page = -1;
-    let galleries = std::iter::from_fn(|| {
-        page += 1;
-        exhentai.search(&config.exhentai.keyword, page).ok()
-    });
-
-    let galleries = galleries
-        .flatten()
-        // FIXME: 由于时间只精确到分钟, 此处存在极小的忽略掉本子的可能性
-        .take_while(|gallery| gallery.post_time > last_time)
-        .collect::<Vec<BasicGalleryInfo>>();
+    let galleries = exhentai.search_galleries_after(&config.exhentai.keyword, last_time)?;
 
     // 从后往前爬, 防止半路失败导致进度记录错误
     for gallery in galleries.into_iter().rev() {
@@ -151,40 +127,28 @@ fn run(config: &Config) -> Result<(), Error> {
         info!("保留图片数量: {}", max_length);
         let img_urls = get_img_urls(gallery, &gallery_info.img_pages[..max_length]);
 
+        info!("发布文章");
         let mut content = img_urls_to_html(&img_urls);
         if gallery_info.img_pages.len() > config.exhentai.max_img_cnt {
             content.push_str(
                 r#"<p>图片数量过多, 只显示部分. 完整版请前往 E 站观看.</p>"#,
             );
         }
-        info!("发布文章");
+        let page = telegraph.create_page(&gallery_info.title, &html_to_node(&content), false)?;
+        info!("文章地址: {}", page.url);
 
-        let gallery = gallery_info;
-
-        let article_url = loop {
-            let result = telegraph.create_page(&gallery.title, &html_to_node(&content), false);
-            match result {
-                Ok(v) => break v.url,
-                Err(e) => {
-                    error!("发布文章失败: {}", e);
-                    sleep(time::Duration::from_secs(10));
-                }
-            }
-        };
-        info!("文章地址: {}", article_url);
-
-        let tags = tags_to_string(&gallery.tags);
+        let tags = tags_to_string(&gallery_info.tags);
         bot.send_message(
             &config.telegram.channel_id,
             &format!(
                 "{}\n<a href=\"{}\">{}</a>",
-                tags, article_url, gallery.title
+                tags, page.url, gallery_info.title
             ),
-            &gallery.url,
+            &gallery_info.url,
         )?;
 
         std::fs::File::create("./LAST_TIME")?
-            .write_all(gallery.post_time.to_rfc3339().as_bytes())?;
+            .write_all(gallery_info.post_time.to_rfc3339().as_bytes())?;
     }
 
     Ok(())

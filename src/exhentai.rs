@@ -230,6 +230,24 @@ impl ExHentai {
 
         Ok(ret)
     }
+
+    pub fn search_galleries_after(
+        &self,
+        keyword: &str,
+        time: DateTime<Local>,
+    ) -> Result<Vec<BasicGalleryInfo>, Error> {
+        info!("搜索 {:?} 之前的本子", time);
+        // generator 还未稳定, 用 from_fn + flatten 凑合一下
+        let mut page = -1;
+        Ok(std::iter::from_fn(|| {
+            page += 1;
+            self.search(keyword, page).ok()
+        })
+        .flatten()
+        // FIXME: 由于时间只精确到分钟, 此处存在极小的忽略掉本子的可能性
+        .take_while(|gallery| gallery.post_time > time)
+        .collect::<Vec<BasicGalleryInfo>>())
+    }
 }
 
 #[cfg(test)]
