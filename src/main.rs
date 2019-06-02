@@ -86,19 +86,20 @@ fn get_img_urls(gallery: BasicGalleryInfo, img_pages: &[String]) -> Vec<String> 
             let now = idx.load(SeqCst);
             info!("第 {} / {} 张图片", now + 1, img_cnt);
             idx.store(now + 1, SeqCst);
-            loop {
+            for _ in 0..5 {
                 let img_url = gallery
                     .get_image_url(url)
                     .and_then(|img_url| upload_by_url(&img_url))
                     .map(|result| result.src);
                 match img_url {
-                    Ok(v) => break v,
+                    Ok(v) => return v,
                     Err(e) => {
                         error!("获取图片地址失败: {}", e);
                         sleep(time::Duration::from_secs(10));
                     }
                 }
             }
+            std::process::exit(1);
         })
         .collect::<Vec<String>>()
 }
@@ -170,7 +171,7 @@ fn main() {
 
     env_logger::init();
 
-    loop {
+    for _ in 0..3 {
         match run(&config) {
             Ok(()) => {
                 info!("任务完成!");
