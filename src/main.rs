@@ -43,12 +43,15 @@ pub fn upload_by_url(url: &str) -> Result<UploadResult, Error> {
 fn tags_to_string(tags: &HashMap<String, Vec<String>>) -> String {
     tags.iter()
         .map(|(k, v)| {
-            let value = v
+            let v = v
                 .iter()
-                .map(|s| format!("#{}", s.replace(' ', "_").replace("_|_", " #")))
+                .map(|s| {
+                    let s = s.replace(' ', "_").replace("_|_", " #").replace('-', "_");
+                    format!("#{}", s)
+                })
                 .collect::<Vec<_>>()
                 .join(" ");
-            format!("<code>{:>9}</code>: {}", k, value)
+            format!("<code>{:>9}</code>: {}", k, v)
         })
         .collect::<Vec<_>>()
         .join("\n")
