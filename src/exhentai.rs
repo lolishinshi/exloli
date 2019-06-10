@@ -1,10 +1,10 @@
 use crate::xpath::parse_html;
 use chrono::prelude::*;
-use failure::{format_err, Error};
+use failure::Error;
 use lazy_static::lazy_static;
 use reqwest::{
     header::{self, HeaderMap, HeaderValue},
-    Client, ClientBuilder, StatusCode,
+    Client, ClientBuilder, RedirectPolicy,
 };
 use std::collections::HashMap;
 
@@ -139,10 +139,13 @@ pub struct ExHentai {
 impl ExHentai {
     /// 登录 E-Hentai (能够访问 ExHentai 的前置条件
     pub fn new(username: &str, password: &str, search_watched: bool) -> Result<Self, Error> {
-        let client = ClientBuilder::new().cookie_store(true).build()?;
+        let client = ClientBuilder::new()
+            .redirect(RedirectPolicy::none())
+            .cookie_store(true)
+            .build()?;
         info!("登录表站...");
         // 登录表站, 获得 cookie
-        let response = client
+        let _response = client
             .post("https://forums.e-hentai.org/index.php")
             .headers(HEADERS.clone())
             .query(&[("act", "Login"), ("CODE", "01")])
@@ -155,25 +158,17 @@ impl ExHentai {
                 ("ipb_login_submit", "Login!"),
             ])
             .send()?;
-        if response.status() != StatusCode::OK {
-            return Err(format_err!(
-                "failed to login: status code {}",
-                response.status()
-            ));
-        }
 
         info!("登录里站...");
         // 访问里站, 取得必要的 cookie
-        let response = client
-            .get("https://exhentai.org")
-            .query(&[("f_search", "lolicon")])
-            .send()?;
-        if response.status() != StatusCode::OK {
-            return Err(format_err!(
-                "failed to login: status code {}",
-                response.status()
-            ));
+        // 此处手动处理重定向, 因为 reqwest 的重定向处理似乎有问题
+        let mut response = client.get("https://exhentai.org").send()?;
+        for _ in 0..3 {
+            let next_url = response.headers().get(header::LOCATION).unwrap().to_str()?;
+            response = client.get(next_url).send()?;
         }
+        // 获得过滤设置相关的 cookie ?
+        let _response = client.get("https://exhentai.org/uconfig.php").send()?;
 
         Ok(Self {
             client,
@@ -194,9 +189,11 @@ impl ExHentai {
             .query(&[("f_search", keyword), ("page", &page.to_string())])
             .send()?;
         debug!("状态码: {}", response.status());
-        let html = parse_html(response.text()?)?;
+        let text = response.text()?;
+        let html = parse_html(text)?;
 
         let gallery_list = html.xpath_elem(r#"//table[@class="itg gltc"]/tr[position() > 1]"#)?;
+        debug!("数量: {}", gallery_list.len());
 
         let mut ret = vec![];
         for gallery in gallery_list {
@@ -239,14 +236,17 @@ impl ExHentai {
         info!("搜索 {:?} 之前的本子", time);
         // generator 还未稳定, 用 from_fn + flatten 凑合一下
         let mut page = -1;
-        Ok(std::iter::from_fn(|| {
+        let result = std::iter::from_fn(|| {
             page += 1;
             self.search(keyword, page).ok()
         })
         .flatten()
         // FIXME: 由于时间只精确到分钟, 此处存在极小的忽略掉本子的可能性
         .take_while(|gallery| gallery.post_time > time)
-        .collect::<Vec<BasicGalleryInfo>>())
+        .collect::<Vec<BasicGalleryInfo>>();
+
+        info!("找到 {} 本", result.len());
+        Ok(result)
     }
 }
 
