@@ -139,8 +139,18 @@ pub struct ExHentai {
 impl ExHentai {
     /// 登录 E-Hentai (能够访问 ExHentai 的前置条件
     pub fn new(username: &str, password: &str, search_watched: bool) -> Result<Self, Error> {
+        // 此处手动设置重定向, 因为 reqwest 的默认重定向处理策略会把相同 URL 直接判定为无限循环
+        // 然而其实 COOKIE 变了, 所以不会无限循环
+        let custom = RedirectPolicy::custom(|attempt| {
+            if attempt.previous().len() > 3 {
+                attempt.too_many_redirects()
+            } else {
+                attempt.follow()
+            }
+        });
+
         let client = ClientBuilder::new()
-            .redirect(RedirectPolicy::none())
+            .redirect(custom)
             .cookie_store(true)
             .build()?;
         info!("登录表站...");
@@ -161,12 +171,7 @@ impl ExHentai {
 
         info!("登录里站...");
         // 访问里站, 取得必要的 cookie
-        // 此处手动处理重定向, 因为 reqwest 的重定向处理似乎有问题
-        let mut response = client.get("https://exhentai.org").send()?;
-        for _ in 0..3 {
-            let next_url = response.headers().get(header::LOCATION).unwrap().to_str()?;
-            response = client.get(next_url).send()?;
-        }
+        let _response = client.get("https://exhentai.org").send()?;
         // 获得过滤设置相关的 cookie ?
         let _response = client.get("https://exhentai.org/uconfig.php").send()?;
 
