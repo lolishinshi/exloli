@@ -257,28 +257,7 @@ impl ExHentai {
 
 #[cfg(test)]
 mod tests {
-    use crate::{config::Config, exhentai::ExHentai};
-
     #[test]
     fn test_login() {
-        color_backtrace::install();
-
-        let config = Config::new("./config.toml").unwrap();
-        let exhentai = ExHentai::new(
-            &config.exhentai.username,
-            &config.exhentai.password,
-            config.exhentai.search_watched,
-        )
-        .unwrap();
-
-        for i in exhentai
-            .search("female:lolicon language:Chinese", 0)
-            .unwrap()
-        {
-            println!("{:?}", i);
-        }
-
-        let x = exhentai.get_gallery("https://exhentai.org/g/1415107/2bd0489932/");
-        println!("{:?}", x);
     }
 }
