@@ -30,4 +30,4 @@ telegraph-rs = { git = "https://github.com/Aloxaf/telegraph-rs" }
 
 # 日志
 log = "0.4.7"
-env_logger = "0.6.1"
+env_logger = "0.6.2"
