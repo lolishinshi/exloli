@@ -25,7 +25,7 @@ color-backtrace = "0.1.3"
 failure = "0.1.5"
 lazy_static = "1.3.0"
 chrono = "0.4.7"
-rayon = "1.0"
+rayon = "1.1"
 telegraph-rs = { git = "https://github.com/Aloxaf/telegraph-rs" }
 
 # 日志
