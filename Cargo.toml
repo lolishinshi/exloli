@@ -11,7 +11,7 @@ edition = "2018"
 # 网络相关
 libxml = "0.2.12"
 reqwest = { version = "0.9.16", features = ["socks"] }
-tempfile = "3.0.7"
+tempfile = "3.1.0"
 json = "0.11.13"
 telegram_types = "0.5.0"
 
