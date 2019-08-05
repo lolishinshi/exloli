@@ -195,6 +195,7 @@ impl ExHentai {
             .send()?;
         debug!("状态码: {}", response.status());
         let text = response.text()?;
+        debug!("{}", &text[..100]);
         let html = parse_html(text)?;
 
         let gallery_list = html.xpath_elem(r#"//table[@class="itg gltc"]/tr[position() > 1]"#)?;
@@ -243,7 +244,13 @@ impl ExHentai {
         let mut page = -1;
         let result = std::iter::from_fn(|| {
             page += 1;
-            self.search(keyword, page).ok()
+            match self.search(keyword, page) {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    error!("{}", e);
+                    None
+                },
+            }
         })
         .flatten()
         // FIXME: 由于时间只精确到分钟, 此处存在极小的忽略掉本子的可能性

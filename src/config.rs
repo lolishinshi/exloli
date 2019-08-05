@@ -18,10 +18,13 @@ pub struct ExHentai {
     pub keyword: String,
     pub search_watched: bool,
     pub max_img_cnt: usize,
+    pub local_cache: bool,
+    pub cache_path: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Telegraph {
+    pub upload: bool,
     pub access_token: String,
     pub author_name: String,
     pub author_url: String,
