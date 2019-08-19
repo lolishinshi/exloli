@@ -29,5 +29,5 @@ rayon = "1.1"
 telegraph-rs = { git = "https://github.com/Aloxaf/telegraph-rs" }
 
 # 日志
-log = "0.4.7"
+log = "0.4.8"
 env_logger = "0.6.1"
