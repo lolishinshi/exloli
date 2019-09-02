@@ -24,7 +24,7 @@ serde_json = "1.0.40"
 color-backtrace = "0.2.3"
 failure = "0.1.5"
 lazy_static = "1.4.0"
-chrono = "0.4.7"
+chrono = "0.4.8"
 rayon = "1.1"
 telegraph-rs = { git = "https://github.com/Aloxaf/telegraph-rs" }
 
