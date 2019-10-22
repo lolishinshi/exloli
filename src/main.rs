@@ -3,13 +3,18 @@ extern crate log;
 #[macro_use]
 extern crate lazy_static;
 
-use crate::{config::Config, exhentai::BasicGalleryInfo};
+use crate::{
+    config::Config,
+    exhentai::{BasicGalleryInfo, ExHentai},
+    telegram::Bot,
+};
 use chrono::{prelude::*, Duration};
-use failure::Error;
+use failure::{format_err, Error};
 use futures::prelude::*;
 use reqwest::Client;
 use std::{
     collections::HashMap,
+    env,
     fs::{create_dir_all, File},
     io::{Read, Write},
     path::Path,
@@ -22,6 +27,7 @@ use std::{
 use telegraph_rs::{html_to_node, Telegraph, UploadResult};
 use tempfile::NamedTempFile;
 use tokio::timer::delay_for;
+use v_htmlescape::escape;
 
 mod config;
 mod exhentai;
@@ -109,7 +115,7 @@ fn img_urls_to_html(img_urls: &[String]) -> String {
 }
 
 /// 从图片页面地址获取图片原始地址
-async fn get_img_urls<'a>(gallery: BasicGalleryInfo<'a>, img_pages: &[String]) -> Vec<String> {
+async fn get_img_urls<'a>(gallery: &BasicGalleryInfo<'a>, img_pages: &[String]) -> Vec<String> {
     let img_cnt = img_pages.len();
     let idx = Arc::new(AtomicU32::new(0));
 
@@ -156,76 +162,116 @@ async fn get_img_urls<'a>(gallery: BasicGalleryInfo<'a>, img_pages: &[String]) -
         .await
 }
 
-async fn run(config: &Config) -> Result<(), Error> {
-    info!("登录中...");
-    let bot = config.init_telegram();
-    let exhentai = config.init_exhentai().await?;
-    let telegraph = config.init_telegraph().await?;
+struct ExLoli {
+    config: Config,
+    bot: Bot,
+    exhentai: ExHentai,
+    telegraph: Telegraph,
+}
 
-    // 筛选最新本子
-    let last_time = load_last_time()?;
-    let galleries = exhentai
-        .search_galleries_after(&config.exhentai.keyword, last_time)
-        .await?;
+impl ExLoli {
+    async fn new() -> Result<Self, Error> {
+        let config =
+            Config::new("config.toml").map_err(|e| format_err!("配置文件解析失败:\n{}", e))?;
+        let bot = config.init_telegram();
+        let exhentai = config.init_exhentai().await?;
+        let telegraph = config.init_telegraph().await?;
+        Ok(ExLoli {
+            config,
+            bot,
+            exhentai,
+            telegraph,
+        })
+    }
 
-    // 从后往前爬, 防止半路失败导致进度记录错误
-    for gallery in galleries.into_iter().rev() {
+    async fn scan_and_upload(&self) -> Result<(), Error> {
+        // 筛选最新本子
+        let last_time = load_last_time()?;
+        let galleries = self
+            .exhentai
+            .search_galleries_after(&self.config.exhentai.keyword, last_time)
+            .await?;
+
+        // 从后往前爬, 防止半路失败导致进度记录错误
+        for gallery in galleries.into_iter().rev() {
+            self.upload_gallery_to_telegram(&gallery).await?;
+            std::fs::File::create("./LAST_TIME")?
+                .write_all(gallery.post_time.to_rfc3339().as_bytes())?;
+        }
+
+        Ok(())
+    }
+
+    async fn upload_gallery_by_url(&self, url: &str) -> Result<(), Error> {
+        let gallery = self.exhentai.get_gallery_by_url(url).await?;
+        self.upload_gallery_to_telegram(&gallery).await
+    }
+
+    async fn upload_gallery_to_telegram<'a>(
+        &'a self,
+        gallery: &BasicGalleryInfo<'a>,
+    ) -> Result<(), Error> {
         info!("画廊名称: {}", gallery.title);
         info!("画廊地址: {}", gallery.url);
 
         let gallery_info = gallery.get_full_info().await?;
 
-        let max_length = gallery_info
-            .img_pages
-            .len()
-            .min(config.exhentai.max_img_cnt);
+        let actual_img_cnt = gallery_info.img_pages.len();
+        let max_img_cnt = self.config.exhentai.max_img_cnt;
+        let max_length = std::cmp::min(actual_img_cnt, max_img_cnt);
+
+        let img_pages = &gallery_info.img_pages[..max_length];
         info!("保留图片数量: {}", max_length);
-        let img_urls = get_img_urls(gallery, &gallery_info.img_pages[..max_length]).await;
 
-        if config.telegraph.upload {
-            info!("发布文章");
-            let mut content = img_urls_to_html(&img_urls);
-            if gallery_info.img_pages.len() > config.exhentai.max_img_cnt {
-                content.push_str(r#"<p>图片数量过多, 只显示部分. 完整版请前往 E 站观看.</p>"#);
-            }
-            let page = telegraph
-                .create_page(&gallery_info.title, &html_to_node(&content), false)
-                .await?;
-            info!("文章地址: {}", page.url);
+        let img_urls = get_img_urls(gallery, img_pages).await;
 
-            let tags = tags_to_string(&gallery_info.tags);
-            bot.send_message(
-                &config.telegram.channel_id,
-                &format!(
-                    "{}\n<a href=\"{}\">{}</a>",
-                    tags, page.url, gallery_info.title
-                ),
-                &gallery_info.url,
-            )
-            .await?;
+        if !self.config.telegraph.upload {
+            return Ok(());
         }
 
-        std::fs::File::create("./LAST_TIME")?
-            .write_all(gallery_info.post_time.to_rfc3339().as_bytes())?;
-    }
+        info!("发表文章");
+        let mut content = img_urls_to_html(&img_urls);
+        if actual_img_cnt > max_img_cnt {
+            content.push_str(r#"<p>图片数量过多, 只显示部分. 完整版请前往 E 站观看.</p>"#);
+        }
+        let page = self
+            .telegraph
+            .create_page(&gallery_info.title, &html_to_node(&content), false)
+            .await?;
+        info!("文章地址: {}", page.url);
 
-    Ok(())
+        let tags = tags_to_string(&gallery_info.tags);
+        let text = format!(
+            "{}\n<a href=\"{}\">{}</a>",
+            tags,
+            page.url,
+            escape(&gallery_info.title)
+        );
+        self.bot
+            .send_message(&self.config.telegram.channel_id, &text, &gallery_info.url)
+            .await
+    }
 }
 
 #[tokio::main]
 async fn main() {
-    let config = Config::new("config.toml").unwrap_or_else(|e| {
-        eprintln!("配置文件解析失败:\n{}", e);
+    let exloli = ExLoli::new().await.unwrap_or_else(|e| {
+        eprintln!("{}", e);
         std::process::exit(1);
     });
 
-    // 设置相关环境变量
-    std::env::set_var("RUST_LOG", format!("exloli={}", config.log_level));
-
+    let args = env::args().collect::<Vec<_>>();
+    env::set_var("RUST_LOG", format!("exloli={}", exloli.config.log_level));
     env_logger::init();
 
-    for _ in 0..3 {
-        match run(&config).await {
+    for _ in 0..3i32 {
+        let result = if args.len() == 3 && args[1] == "upload" {
+            exloli.upload_gallery_by_url(&args[2]).await
+        } else {
+            exloli.scan_and_upload().await
+        };
+
+        match result {
             Ok(()) => {
                 info!("任务完成!");
                 return;

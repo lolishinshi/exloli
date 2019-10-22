@@ -12,8 +12,8 @@ edition = "2018"
 libxml = "0.2.12"
 reqwest = { version = "0.10.0-alpha.1", features = [ "json", "cookies", "gzip" ]}
 tempfile = "3.1.0"
-json = "0.12.0"
 telegram_types = "0.5.0"
+v_htmlescape = "0.4.5"
 
 # 配置文件解析
 toml = "0.5.3"
@@ -26,10 +26,9 @@ failure = "0.1.5"
 lazy_static = "1.4.0"
 chrono = "0.4.9"
 telegraph-rs = { version = "0.4.0", git = "https://github.com/Aloxaf/telegraph-rs" }
+tokio = "0.2.0-alpha.6"
+futures-preview = "0.3.0-alpha.19"
 
 # 日志
 log = "0.4.8"
 env_logger = "0.6.1"
-
-tokio = "0.2.0-alpha.6"
-futures-preview = "0.3.0-alpha.19"

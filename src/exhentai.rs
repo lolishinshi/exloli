@@ -273,6 +273,23 @@ impl ExHentai {
         info!("找到 {} 本", result.len());
         Ok(result)
     }
+
+    pub async fn get_gallery_by_url<'a>(
+        &'a self,
+        url: &str,
+    ) -> Result<BasicGalleryInfo<'a>, Error> {
+        info!("获取本子信息: {}", url);
+        let response = self.client.get(url).send().await?;
+        let html = parse_html(response.text().await?)?;
+        let title = html.xpath_text(r#"//h1[@id="gn"]/text()"#)?.swap_remove(0);
+        Ok(BasicGalleryInfo {
+            client: &self.client,
+            title,
+            url: url.to_owned(),
+            // 不需要时间, 随便填一个吧
+            post_time: Local.datetime_from_str("1926-08-17 00:00", "%Y-%m-%d %H:%M")?,
+        })
+    }
 }
 
 #[cfg(test)]

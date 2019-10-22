@@ -1,6 +1,6 @@
 use failure::{format_err, Error};
 use reqwest::Client;
-use telegram_types::bot::types;
+use telegram_types::bot::{methods::*, types::*};
 
 #[derive(Debug)]
 pub struct Bot {
@@ -17,32 +17,33 @@ impl Bot {
     }
 
     pub async fn send_message(&self, chat_id: &str, text: &str, url: &str) -> Result<(), Error> {
-        let button = types::InlineKeyboardMarkup {
-            inline_keyboard: vec![vec![types::InlineKeyboardButton {
+        let button = ReplyMarkup::InlineKeyboard(InlineKeyboardMarkup {
+            inline_keyboard: vec![vec![InlineKeyboardButton {
                 text: "原始地址".to_owned(),
-                pressed: types::InlineKeyboardButtonPressed::Url(url.to_owned()),
+                pressed: InlineKeyboardButtonPressed::Url(url.to_owned()),
             }]],
-        };
+        });
+        let message = SendMessage::new(ChatTarget::username(chat_id), text)
+            .parse_mode(ParseMode::HTML)
+            .reply_markup(button);
 
         let response = self
             .client
-            .get(&format!(
-                "https://api.telegram.org/bot{}/sendMessage",
-                self.token,
-            ))
-            .query(&[
-                ("chat_id", chat_id),
-                ("text", text),
-                ("parse_mode", "HTML"),
-                ("reply_markup", &*serde_json::to_string(&button).unwrap()),
-            ])
+            .get(&SendMessage::url(&self.token))
+            .json(&message)
             .send()
             .await?;
-        let json = json::parse(&response.text().await?)?;
-        if json["ok"] == true {
+
+        let result = response.json::<TelegramResult<Message>>().await?;
+
+        if result.ok {
             Ok(())
         } else {
-            Err(format_err!("{}", json))
+            Err(format_err!(
+                "{:?} {:?}",
+                result.error_code,
+                result.description
+            ))
         }
     }
 }

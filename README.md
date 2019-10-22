@@ -21,9 +21,9 @@ cargo install --git https://github.com/Aloxaf/exloli
 config.toml 模板如下
 
 ```toml
-# [可选] 日志等级, 可选 INFO, DEBUG, ERROR. 默认无
+# [可选] 日志等级, 可选 INFO, DEBUG, ERROR. 默认 INFO
 log_level = "INFO"
-# [可选] 抓取线程. 默认 CPU 核数
+# [可选] 图片下载并发数. 默认 4
 threads_num = "4"
 
 [exhentai]
@@ -38,8 +38,14 @@ keyword = "female:lolicon language:Chinese"
 search_watched = false
 # 最大展示的图片数量
 max_img_cnt = 50
+# 是否在本地缓存
+local_cache = false
+# 缓存位置
+cache_path = "./data"
 
 [telegraph]
+# 是否上传 telegraph
+upload = true
 # telegraph 账号 token
 access_token = "TOKEN"
 # 作者名称
