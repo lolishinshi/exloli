@@ -41,27 +41,27 @@ pub async fn upload_by_url(url: &str, path: &str) -> Result<UploadResult, Error>
     // 下载图片
     debug!("下载图片: {}", url);
 
-    let response = client.get(url).send().await?;
-    let bytes = response.bytes().await?;
+    let mut tmp = NamedTempFile::new()?;
 
     let file = if Path::new(path).exists() {
         Path::new(path).to_owned()
     } else {
+        let response = client.get(url).send().await?;
+        let bytes = response.bytes().await?;
+
         if CONFIG.exhentai.local_cache {
             let mut file = File::create(path)?;
             file.write_all(bytes.as_ref())?;
             Path::new(path).to_owned()
         } else {
-            let mut file = NamedTempFile::new()?;
-            file.write_all(bytes.as_ref())?;
-            file.path().to_owned()
+            tmp.write_all(bytes.as_ref())?;
+            tmp.path().to_owned()
         }
     };
 
     let result = if CONFIG.telegraph.upload {
         debug!("上传图片: {:?}", file);
-        let result = Telegraph::upload(&[file]).await?.swap_remove(0);
-        result
+        Telegraph::upload(&[file]).await?.swap_remove(0)
     } else {
         UploadResult { src: "".to_owned() }
     };
@@ -118,38 +118,41 @@ async fn get_img_urls<'a>(gallery: BasicGalleryInfo<'a>, img_pages: &[String]) -
         create_dir_all(path).unwrap();
     }
 
-    let mut urls = vec![];
-    for (i, url) in img_pages.iter().enumerate() {
-        let now = idx.load(SeqCst);
-        info!("第 {} / {} 张图片", now + 1, img_cnt);
-        idx.store(now + 1, SeqCst);
-        // 最多重试五次
-        for _ in 0..5 {
-            let img_url = gallery
-                .get_image_url(url)
-                .and_then(|img_url| {
-                    let gallery = gallery.clone();
-                    async move {
-                        let path =
-                            format!("{}/{}/{}", &CONFIG.exhentai.cache_path, &gallery.title, i);
-                        upload_by_url(&img_url, &path).await
+    let f = img_pages
+        .iter()
+        .enumerate()
+        .map(|(i, url)| {
+            let gallery = gallery.clone();
+            let idx = idx.clone();
+            async move {
+                let now = idx.load(SeqCst);
+                info!("第 {} / {} 张图片", now + 1, img_cnt);
+                idx.store(now + 1, SeqCst);
+                // 最多重试五次
+                for _ in 0..5i32 {
+                    let path = format!("{}/{}/{}", &CONFIG.exhentai.cache_path, &gallery.title, i);
+                    let img_url = gallery
+                        .get_image_url(url)
+                        .and_then(|img_url| async move { upload_by_url(&img_url, &path).await })
+                        .await
+                        .map(|result| result.src);
+                    match img_url {
+                        Ok(v) => return Some(v),
+                        Err(e) => {
+                            error!("获取图片地址失败: {}", e);
+                            delay_for(time::Duration::from_secs(10));
+                        }
                     }
-                })
-                .await
-                .map(|result| result.src);
-            match img_url {
-                Ok(v) => {
-                    urls.push(v);
-                    break;
                 }
-                Err(e) => {
-                    error!("获取图片地址失败: {}", e);
-                    delay_for(time::Duration::from_secs(10));
-                }
+                None
             }
-        }
-    }
-    urls
+        })
+        .collect::<Vec<_>>();
+    futures::future::join_all(f)
+        .await
+        .into_iter()
+        .flatten()
+        .collect()
 }
 
 async fn run(config: &Config) -> Result<(), Error> {
@@ -178,7 +181,7 @@ async fn run(config: &Config) -> Result<(), Error> {
         info!("保留图片数量: {}", max_length);
         let img_urls = get_img_urls(gallery, &gallery_info.img_pages[..max_length]).await;
 
-        if CONFIG.telegraph.upload {
+        if config.telegraph.upload {
             info!("发布文章");
             let mut content = img_urls_to_html(&img_urls);
             if gallery_info.img_pages.len() > config.exhentai.max_img_cnt {
@@ -216,12 +219,7 @@ async fn main() {
     });
 
     // 设置相关环境变量
-    if let Some(log_level) = config.log_level.as_ref() {
-        std::env::set_var("RUST_LOG", format!("exloli={}", log_level));
-    }
-    if let Some(threads_num) = config.threads_num.as_ref() {
-        std::env::set_var("RAYON_NUM_THREADS", threads_num);
-    }
+    std::env::set_var("RUST_LOG", format!("exloli={}", config.log_level));
 
     env_logger::init();
 

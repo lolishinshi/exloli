@@ -332,7 +332,7 @@ dependencies = [
 
 [[package]]
 name = "exloli"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono 0.4.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "color-backtrace 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",

@@ -4,8 +4,10 @@ use std::{fs::File, io::Read, path::Path};
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    pub log_level: Option<String>,
-    pub threads_num: Option<String>,
+    #[serde(default = "default_log_level")]
+    pub log_level: String,
+    #[serde(default = "default_threads_num")]
+    pub threads_num: usize,
     pub exhentai: ExHentai,
     pub telegraph: Telegraph,
     pub telegram: Telegram,
@@ -66,6 +68,14 @@ impl Config {
     pub fn init_telegram(&self) -> crate::telegram::Bot {
         crate::telegram::Bot::new(&self.telegram.token)
     }
+}
+
+fn default_threads_num() -> usize {
+    4
+}
+
+fn default_log_level() -> String {
+    "info".to_owned()
 }
 
 #[cfg(test)]

@@ -205,7 +205,7 @@ impl ExHentai {
             .await?;
         debug!("状态码: {}", response.status());
         let text = response.text().await?;
-        debug!("{}", &text[..100]);
+        debug!("返回: {}", &text[..100.min(text.len())]);
         let html = parse_html(text)?;
 
         let gallery_list = html.xpath_elem(r#"//table[@class="itg gltc"]/tr[position() > 1]"#)?;
