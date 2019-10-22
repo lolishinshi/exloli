@@ -4,7 +4,7 @@ use failure::Error;
 use lazy_static::lazy_static;
 use reqwest::{
     header::{self, HeaderMap, HeaderValue},
-    Client, ClientBuilder, RedirectPolicy,
+    Client, RedirectPolicy,
 };
 use std::collections::HashMap;
 
@@ -31,7 +31,7 @@ lazy_static! {
 }
 
 /// 基本画廊信息
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BasicGalleryInfo<'a> {
     client: &'a Client,
     /// 画廊标题
@@ -44,11 +44,11 @@ pub struct BasicGalleryInfo<'a> {
 
 impl<'a> BasicGalleryInfo<'a> {
     /// 获取画廊的完整信息
-    pub fn get_full_info(&self) -> Result<FullGalleryInfo, Error> {
+    pub async fn get_full_info(&self) -> Result<FullGalleryInfo, Error> {
         debug!("获取画廊信息: {}", self.url);
-        let mut response = self.client.get(&self.url).send()?;
+        let response = self.client.get(&self.url).send().await?;
         debug!("状态码: {}", response.status());
-        let mut html = parse_html(response.text()?)?;
+        let mut html = parse_html(response.text().await?)?;
 
         // 标签
         let mut tags = HashMap::new();
@@ -85,8 +85,8 @@ impl<'a> BasicGalleryInfo<'a> {
             html.xpath_text(r#"//table[@class="ptt"]//td[last()]/a/@href"#)
         {
             debug!("下一页: {:?}", next_page);
-            let mut response = self.client.get(&next_page.swap_remove(0)).send()?;
-            html = parse_html(response.text()?)?;
+            let response = self.client.get(&next_page.swap_remove(0)).send().await?;
+            html = parse_html(response.text().await?)?;
             img_pages.extend(html.xpath_text(r#"//div[@class="gdtl"]/a/@href"#)?)
         }
 
@@ -102,11 +102,11 @@ impl<'a> BasicGalleryInfo<'a> {
     }
 
     /// 根据图片页面的 URL 获取图片的真实地址
-    pub fn get_image_url(&self, url: &str) -> Result<String, Error> {
+    pub async fn get_image_url(&self, url: &str) -> Result<String, Error> {
         debug!("获取图片真实地址");
-        let mut response = self.client.get(url).send()?;
+        let response = self.client.get(url).send().await?;
         debug!("状态码: {}", response.status());
-        let html = parse_html(response.text()?)?;
+        let html = parse_html(response.text().await?)?;
         Ok(html.xpath_text(r#"//img[@id="img"]/@src"#)?.swap_remove(0))
     }
 }
@@ -138,7 +138,7 @@ pub struct ExHentai {
 
 impl ExHentai {
     /// 登录 E-Hentai (能够访问 ExHentai 的前置条件
-    pub fn new(username: &str, password: &str, search_watched: bool) -> Result<Self, Error> {
+    pub async fn new(username: &str, password: &str, search_watched: bool) -> Result<Self, Error> {
         // 此处手动设置重定向, 因为 reqwest 的默认重定向处理策略会把相同 URL 直接判定为无限循环
         // 然而其实 COOKIE 变了, 所以不会无限循环
         let custom = RedirectPolicy::custom(|attempt| {
@@ -149,7 +149,7 @@ impl ExHentai {
             }
         });
 
-        let client = ClientBuilder::new()
+        let client = Client::builder()
             .redirect(custom)
             .cookie_store(true)
             .build()?;
@@ -167,13 +167,18 @@ impl ExHentai {
                 ("PassWord", password),
                 ("ipb_login_submit", "Login!"),
             ])
-            .send()?;
+            .send()
+            .await?;
 
         info!("登录里站...");
         // 访问里站, 取得必要的 cookie
-        let _response = client.get("https://exhentai.org").send()?;
+        let _response = client.get("https://exhentai.org").send().await?;
         // 获得过滤设置相关的 cookie ?
-        let _response = client.get("https://exhentai.org/uconfig.php").send()?;
+        let _response = client
+            .get("https://exhentai.org/uconfig.php")
+            .send()
+            .await?;
+        info!("登录成功!");
 
         Ok(Self {
             client,
@@ -186,15 +191,20 @@ impl ExHentai {
     }
 
     /// 搜索指定关键字
-    pub fn search(&self, keyword: &str, page: i32) -> Result<Vec<BasicGalleryInfo>, Error> {
+    pub async fn search<'a>(
+        &'a self,
+        keyword: &str,
+        page: i32,
+    ) -> Result<Vec<BasicGalleryInfo<'a>>, Error> {
         debug!("搜索 {} - {}", keyword, page);
-        let mut response = self
+        let response = self
             .client
             .get(&self.search_page)
             .query(&[("f_search", keyword), ("page", &page.to_string())])
-            .send()?;
+            .send()
+            .await?;
         debug!("状态码: {}", response.status());
-        let text = response.text()?;
+        let text = response.text().await?;
         debug!("{}", &text[..100]);
         let html = parse_html(text)?;
 
@@ -234,28 +244,31 @@ impl ExHentai {
         Ok(ret)
     }
 
-    pub fn search_galleries_after(
-        &self,
+    pub async fn search_galleries_after<'a>(
+        &'a self,
         keyword: &str,
         time: DateTime<Local>,
-    ) -> Result<Vec<BasicGalleryInfo>, Error> {
+    ) -> Result<Vec<BasicGalleryInfo<'a>>, Error> {
         info!("搜索 {:?} 之前的本子", time);
         // generator 还未稳定, 用 from_fn + flatten 凑合一下
-        let mut page = -1;
-        let result = std::iter::from_fn(|| {
-            page += 1;
-            match self.search(keyword, page) {
-                Ok(v) => Some(v),
+        let mut result = vec![];
+        'l: for page in 0.. {
+            match self.search(keyword, page).await {
+                Ok(v) => {
+                    for gallery in v {
+                        // FIXME: 由于时间只精确到分钟, 此处存在极小的忽略掉本子的可能性
+                        if gallery.post_time <= time {
+                            break 'l;
+                        }
+                        result.push(gallery);
+                    }
+                }
                 Err(e) => {
                     error!("{}", e);
-                    None
-                },
+                    break;
+                }
             }
-        })
-        .flatten()
-        // FIXME: 由于时间只精确到分钟, 此处存在极小的忽略掉本子的可能性
-        .take_while(|gallery| gallery.post_time > time)
-        .collect::<Vec<BasicGalleryInfo>>();
+        }
 
         info!("找到 {} 本", result.len());
         Ok(result)
@@ -265,6 +278,5 @@ impl ExHentai {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn test_login() {
-    }
+    fn test_login() {}
 }

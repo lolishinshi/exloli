@@ -44,21 +44,23 @@ impl Config {
         Ok(toml::from_str(&str)?)
     }
 
-    pub fn init_telegraph(&self) -> Result<telegraph_rs::Telegraph, Error> {
+    pub async fn init_telegraph(&self) -> Result<telegraph_rs::Telegraph, Error> {
         let telegraph = &self.telegraph;
         Ok(telegraph_rs::Telegraph::new(&telegraph.author_name)
             .author_url(&telegraph.author_url)
             .access_token(&telegraph.access_token)
-            .create()?)
+            .create()
+            .await?)
     }
 
-    pub fn init_exhentai(&self) -> Result<crate::exhentai::ExHentai, Error> {
+    pub async fn init_exhentai(&self) -> Result<crate::exhentai::ExHentai, Error> {
         let exhentai = &self.exhentai;
         Ok(crate::exhentai::ExHentai::new(
             &exhentai.username,
             &exhentai.password,
             exhentai.search_watched,
-        )?)
+        )
+        .await?)
     }
 
     pub fn init_telegram(&self) -> crate::telegram::Bot {
