@@ -6,23 +6,22 @@ extern crate lazy_static;
 use crate::{config::Config, exhentai::BasicGalleryInfo};
 use chrono::{prelude::*, Duration};
 use failure::Error;
-use rayon::prelude::*;
+use futures::prelude::*;
 use reqwest::Client;
 use std::{
     collections::HashMap,
-    io::{self, Read, Write},
-    fs::create_dir_all,
+    fs::{create_dir_all, File},
+    io::{Read, Write},
+    path::Path,
     sync::{
         atomic::{AtomicU32, Ordering::SeqCst},
         Arc,
     },
-    thread::sleep,
     time,
 };
 use telegraph_rs::{html_to_node, Telegraph, UploadResult};
 use tempfile::NamedTempFile;
-use std::fs::File;
-use std::path::Path;
+use tokio::timer::delay_for;
 
 mod config;
 mod exhentai;
@@ -37,31 +36,32 @@ lazy_static! {
 }
 
 /// 通过 URL 上传图片至 telegraph
-pub fn upload_by_url(url: &str, path: &str) -> Result<UploadResult, Error> {
+pub async fn upload_by_url(url: &str, path: &str) -> Result<UploadResult, Error> {
     let client = Client::new();
     // 下载图片
     debug!("下载图片: {}", url);
 
-    let mut response = client.get(url).send()?;
+    let mut tmp = NamedTempFile::new()?;
 
     let file = if Path::new(path).exists() {
         Path::new(path).to_owned()
     } else {
+        let response = client.get(url).send().await?;
+        let bytes = response.bytes().await?;
+
         if CONFIG.exhentai.local_cache {
             let mut file = File::create(path)?;
-            io::copy(&mut response, &mut file)?;
+            file.write_all(bytes.as_ref())?;
             Path::new(path).to_owned()
         } else {
-            let mut file = NamedTempFile::new()?;
-            io::copy(&mut response, &mut file)?;
-            file.path().to_owned()
+            tmp.write_all(bytes.as_ref())?;
+            tmp.path().to_owned()
         }
     };
 
     let result = if CONFIG.telegraph.upload {
         debug!("上传图片: {:?}", file);
-        let result = Telegraph::upload(&[file])?.swap_remove(0);
-        result
+        Telegraph::upload(&[file]).await?.swap_remove(0)
     } else {
         UploadResult { src: "".to_owned() }
     };
@@ -109,76 +109,88 @@ fn img_urls_to_html(img_urls: &[String]) -> String {
 }
 
 /// 从图片页面地址获取图片原始地址
-fn get_img_urls(gallery: BasicGalleryInfo, img_pages: &[String]) -> Vec<String> {
+async fn get_img_urls<'a>(gallery: BasicGalleryInfo<'a>, img_pages: &[String]) -> Vec<String> {
     let img_cnt = img_pages.len();
     let idx = Arc::new(AtomicU32::new(0));
 
     if CONFIG.exhentai.local_cache {
         let path = format!("{}/{}", &CONFIG.exhentai.cache_path, &gallery.title);
-        create_dir_all( path).unwrap();
+        create_dir_all(path).unwrap();
     }
 
-    img_pages
-        .par_iter()
+    let f = img_pages
+        .iter()
         .enumerate()
         .map(|(i, url)| {
-            let now = idx.load(SeqCst);
-            info!("第 {} / {} 张图片", now + 1, img_cnt);
-            idx.store(now + 1, SeqCst);
-            for _ in 0..5 {
-                let img_url = gallery
-                    .get_image_url(url)
-                    .and_then(|img_url| {
-                        let path = format!("{}/{}/{}", &CONFIG.exhentai.cache_path, &gallery.title, i);
-                        upload_by_url(&img_url, &path)
-                    })
-                    .map(|result| result.src);
-                match img_url {
-                    Ok(v) => return v,
-                    Err(e) => {
-                        error!("获取图片地址失败: {}", e);
-                        sleep(time::Duration::from_secs(10));
+            let gallery = gallery.clone();
+            let idx = idx.clone();
+            async move {
+                let now = idx.load(SeqCst);
+                info!("第 {} / {} 张图片", now + 1, img_cnt);
+                idx.store(now + 1, SeqCst);
+                // 最多重试五次
+                for _ in 0..5i32 {
+                    let path = format!("{}/{}/{}", &CONFIG.exhentai.cache_path, &gallery.title, i);
+                    let img_url = gallery
+                        .get_image_url(url)
+                        .and_then(|img_url| async move { upload_by_url(&img_url, &path).await })
+                        .await
+                        .map(|result| result.src);
+                    match img_url {
+                        Ok(v) => return Some(v),
+                        Err(e) => {
+                            error!("获取图片地址失败: {}", e);
+                            delay_for(time::Duration::from_secs(10));
+                        }
                     }
                 }
+                None
             }
-            std::process::exit(1);
         })
-        .collect::<Vec<String>>()
+        .collect::<Vec<_>>();
+
+    futures::stream::iter(f)
+        .buffered(CONFIG.threads_num)
+        .filter_map(|x| async move { x })
+        .collect::<Vec<_>>()
+        .await
 }
 
-fn run(config: &Config) -> Result<(), Error> {
+async fn run(config: &Config) -> Result<(), Error> {
     info!("登录中...");
     let bot = config.init_telegram();
-    let exhentai = config.init_exhentai()?;
-    let telegraph = config.init_telegraph()?;
+    let exhentai = config.init_exhentai().await?;
+    let telegraph = config.init_telegraph().await?;
 
     // 筛选最新本子
     let last_time = load_last_time()?;
-    let galleries = exhentai.search_galleries_after(&config.exhentai.keyword, last_time)?;
+    let galleries = exhentai
+        .search_galleries_after(&config.exhentai.keyword, last_time)
+        .await?;
 
     // 从后往前爬, 防止半路失败导致进度记录错误
     for gallery in galleries.into_iter().rev() {
         info!("画廊名称: {}", gallery.title);
         info!("画廊地址: {}", gallery.url);
 
-        let gallery_info = gallery.get_full_info()?;
+        let gallery_info = gallery.get_full_info().await?;
 
         let max_length = gallery_info
             .img_pages
             .len()
             .min(config.exhentai.max_img_cnt);
         info!("保留图片数量: {}", max_length);
-        let img_urls = get_img_urls(gallery, &gallery_info.img_pages[..max_length]);
+        let img_urls = get_img_urls(gallery, &gallery_info.img_pages[..max_length]).await;
 
-        if CONFIG.telegraph.upload {
+        if config.telegraph.upload {
             info!("发布文章");
             let mut content = img_urls_to_html(&img_urls);
             if gallery_info.img_pages.len() > config.exhentai.max_img_cnt {
-                content.push_str(
-                    r#"<p>图片数量过多, 只显示部分. 完整版请前往 E 站观看.</p>"#,
-                );
+                content.push_str(r#"<p>图片数量过多, 只显示部分. 完整版请前往 E 站观看.</p>"#);
             }
-            let page = telegraph.create_page(&gallery_info.title, &html_to_node(&content), false)?;
+            let page = telegraph
+                .create_page(&gallery_info.title, &html_to_node(&content), false)
+                .await?;
             info!("文章地址: {}", page.url);
 
             let tags = tags_to_string(&gallery_info.tags);
@@ -189,7 +201,8 @@ fn run(config: &Config) -> Result<(), Error> {
                     tags, page.url, gallery_info.title
                 ),
                 &gallery_info.url,
-            )?;
+            )
+            .await?;
         }
 
         std::fs::File::create("./LAST_TIME")?
@@ -199,31 +212,27 @@ fn run(config: &Config) -> Result<(), Error> {
     Ok(())
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let config = Config::new("config.toml").unwrap_or_else(|e| {
         eprintln!("配置文件解析失败:\n{}", e);
         std::process::exit(1);
     });
 
     // 设置相关环境变量
-    if let Some(log_level) = config.log_level.as_ref() {
-        std::env::set_var("RUST_LOG", format!("exloli={}", log_level));
-    }
-    if let Some(threads_num) = config.threads_num.as_ref() {
-        std::env::set_var("RAYON_NUM_THREADS", threads_num);
-    }
+    std::env::set_var("RUST_LOG", format!("exloli={}", config.log_level));
 
     env_logger::init();
 
     for _ in 0..3 {
-        match run(&config) {
+        match run(&config).await {
             Ok(()) => {
                 info!("任务完成!");
                 return;
             }
             Err(e) => {
                 error!("任务出错: {}", e);
-                sleep(time::Duration::from_secs(60));
+                delay_for(time::Duration::from_secs(60));
             }
         }
     }

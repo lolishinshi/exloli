@@ -16,7 +16,7 @@ impl Bot {
         }
     }
 
-    pub fn send_message(&self, chat_id: &str, text: &str, url: &str) -> Result<(), Error> {
+    pub async fn send_message(&self, chat_id: &str, text: &str, url: &str) -> Result<(), Error> {
         let button = types::InlineKeyboardMarkup {
             inline_keyboard: vec![vec![types::InlineKeyboardButton {
                 text: "原始地址".to_owned(),
@@ -24,7 +24,7 @@ impl Bot {
             }]],
         };
 
-        let mut response = self
+        let response = self
             .client
             .get(&format!(
                 "https://api.telegram.org/bot{}/sendMessage",
@@ -36,8 +36,9 @@ impl Bot {
                 ("parse_mode", "HTML"),
                 ("reply_markup", &*serde_json::to_string(&button).unwrap()),
             ])
-            .send()?;
-        let json = json::parse(&response.text()?)?;
+            .send()
+            .await?;
+        let json = json::parse(&response.text().await?)?;
         if json["ok"] == true {
             Ok(())
         } else {
