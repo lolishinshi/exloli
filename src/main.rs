@@ -148,11 +148,12 @@ async fn get_img_urls<'a>(gallery: BasicGalleryInfo<'a>, img_pages: &[String]) -
             }
         })
         .collect::<Vec<_>>();
-    futures::future::join_all(f)
+
+    futures::stream::iter(f)
+        .buffered(CONFIG.threads_num)
+        .filter_map(|x| async move { x })
+        .collect::<Vec<_>>()
         .await
-        .into_iter()
-        .flatten()
-        .collect()
 }
 
 async fn run(config: &Config) -> Result<(), Error> {
