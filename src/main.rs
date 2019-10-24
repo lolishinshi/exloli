@@ -249,7 +249,8 @@ impl ExLoli {
         );
         self.bot
             .send_message(&self.config.telegram.channel_id, &text, &gallery_info.url)
-            .await
+            .await?;
+        Ok(())
     }
 }
 
