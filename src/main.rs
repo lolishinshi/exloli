@@ -43,7 +43,9 @@ lazy_static! {
 
 /// 通过 URL 上传图片至 telegraph
 pub async fn upload_by_url(url: &str, path: &str) -> Result<UploadResult, Error> {
-    let client = Client::new();
+    let client = Client::builder()
+        .timeout(time::Duration::from_secs(15))
+        .build()?;
     // 下载图片
     debug!("下载图片: {}", url);
 
@@ -146,7 +148,7 @@ async fn get_img_urls<'a>(gallery: &BasicGalleryInfo<'a>, img_pages: &[String]) 
                         Ok(v) => return Some(v),
                         Err(e) => {
                             error!("获取图片地址失败: {}", e);
-                            delay_for(time::Duration::from_secs(10));
+                            delay_for(time::Duration::from_secs(10)).await;
                         }
                     }
                 }
@@ -264,6 +266,7 @@ async fn main() {
     let args = env::args().collect::<Vec<_>>();
     env::set_var("RUST_LOG", format!("exloli={}", exloli.config.log_level));
     env_logger::init();
+    color_backtrace::install();
 
     for _ in 0..3i32 {
         let result = if args.len() == 3 && args[1] == "upload" {
@@ -279,7 +282,7 @@ async fn main() {
             }
             Err(e) => {
                 error!("任务出错: {}", e);
-                delay_for(time::Duration::from_secs(60));
+                delay_for(time::Duration::from_secs(60)).await;
             }
         }
     }
