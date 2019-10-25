@@ -5,13 +5,14 @@ extern crate lazy_static;
 
 use crate::{
     config::Config,
-    exhentai::{BasicGalleryInfo, ExHentai},
+    exhentai::{BasicGalleryInfo, ExHentai, FullGalleryInfo},
     telegram::Bot,
 };
 use chrono::{prelude::*, Duration};
 use failure::{format_err, Error};
 use futures::prelude::*;
 use reqwest::Client;
+use sled::Db;
 use std::{
     collections::HashMap,
     env,
@@ -39,10 +40,11 @@ lazy_static! {
         eprintln!("配置文件解析失败:\n{}", e);
         std::process::exit(1);
     });
+    static ref DB: Db = Db::open("./db").expect("无法打开数据库");
 }
 
 /// 通过 URL 上传图片至 telegraph
-pub async fn upload_by_url(url: &str, path: &str) -> Result<UploadResult, Error> {
+async fn upload_by_url(url: &str, path: &str) -> Result<UploadResult, Error> {
     let client = Client::builder()
         .timeout(time::Duration::from_secs(15))
         .build()?;
@@ -120,32 +122,49 @@ fn img_urls_to_html(img_urls: &[String]) -> String {
 async fn get_img_urls<'a>(gallery: &BasicGalleryInfo<'a>, img_pages: &[String]) -> Vec<String> {
     let img_cnt = img_pages.len();
     let idx = Arc::new(AtomicU32::new(0));
+    let data_path = format!("{}/{}", &CONFIG.exhentai.cache_path, &gallery.title);
 
     if CONFIG.exhentai.local_cache {
-        let path = format!("{}/{}", &CONFIG.exhentai.cache_path, &gallery.title);
-        create_dir_all(path).unwrap();
+        create_dir_all(data_path).unwrap();
     }
+
+    let update_progress = || {
+        let now = idx.load(SeqCst);
+        idx.store(now + 1, SeqCst);
+        info!("第 {} / {} 张图片", now + 1, img_cnt);
+    };
+
+    let get_image_url = |i: usize, url: String| {
+        async move {
+            let path = format!("{}/{}/{}", &CONFIG.exhentai.cache_path, &gallery.title, i);
+            match DB.get(&url) {
+                Ok(Some(v)) => {
+                    debug!("找到缓存!");
+                    Ok(String::from_utf8(v.to_vec()).expect("无法转为 UTF-8"))
+                }
+                _ => gallery
+                    .get_image_url(&url)
+                    .and_then(|img_url| async move { upload_by_url(&img_url, &path).await })
+                    .await
+                    .map(|result| result.src),
+            }
+        }
+    };
 
     let f = img_pages
         .iter()
         .enumerate()
         .map(|(i, url)| {
-            let gallery = gallery.clone();
-            let idx = idx.clone();
             async move {
-                let now = idx.load(SeqCst);
-                info!("第 {} / {} 张图片", now + 1, img_cnt);
-                idx.store(now + 1, SeqCst);
+                update_progress();
                 // 最多重试五次
                 for _ in 0..5i32 {
-                    let path = format!("{}/{}/{}", &CONFIG.exhentai.cache_path, &gallery.title, i);
-                    let img_url = gallery
-                        .get_image_url(url)
-                        .and_then(|img_url| async move { upload_by_url(&img_url, &path).await })
-                        .await
-                        .map(|result| result.src);
+                    let img_url = get_image_url(i, url.to_owned()).await;
                     match img_url {
-                        Ok(v) => return Some(v),
+                        Ok(v) => {
+                            DB.insert(url, v.as_bytes()).expect("fail to insert");
+                            return Some(v);
+                        }
                         Err(e) => {
                             error!("获取图片地址失败: {}", e);
                             delay_for(time::Duration::from_secs(10)).await;
@@ -157,11 +176,14 @@ async fn get_img_urls<'a>(gallery: &BasicGalleryInfo<'a>, img_pages: &[String]) 
         })
         .collect::<Vec<_>>();
 
-    futures::stream::iter(f)
+    let ret = futures::stream::iter(f)
         .buffered(CONFIG.threads_num)
         .filter_map(|x| async move { x })
         .collect::<Vec<_>>()
-        .await
+        .await;
+
+    DB.flush_async().await.expect("无法写入数据库");
+    ret
 }
 
 struct ExLoli {
@@ -218,6 +240,11 @@ impl ExLoli {
 
         let gallery_info = gallery.get_full_info().await?;
 
+        if let Ok(Some(v)) = DB.get(&gallery.url) {
+            let article_url = String::from_utf8(v.to_vec()).expect("转 UTF-8 失败");
+            return self.publish_to_telegram(&gallery_info, &article_url).await;
+        }
+
         let actual_img_cnt = gallery_info.img_pages.len();
         let max_img_cnt = self.config.exhentai.max_img_cnt;
         let max_length = std::cmp::min(actual_img_cnt, max_img_cnt);
@@ -241,16 +268,26 @@ impl ExLoli {
             .create_page(&gallery_info.title, &html_to_node(&content), false)
             .await?;
         info!("文章地址: {}", page.url);
+        DB.insert(gallery.url.as_bytes(), page.url.as_bytes())
+            .expect("插入失败");
 
-        let tags = tags_to_string(&gallery_info.tags);
+        self.publish_to_telegram(&gallery_info, &page.url).await
+    }
+
+    async fn publish_to_telegram(
+        &self,
+        gallery: &FullGalleryInfo,
+        article: &str,
+    ) -> Result<(), Error> {
+        let tags = tags_to_string(&gallery.tags);
         let text = format!(
             "{}\n<a href=\"{}\">{}</a>",
             tags,
-            page.url,
-            escape(&gallery_info.title)
+            article,
+            escape(&gallery.title)
         );
         self.bot
-            .send_message(&self.config.telegram.channel_id, &text, &gallery_info.url)
+            .send_message(&self.config.telegram.channel_id, &text, &gallery.url)
             .await?;
         Ok(())
     }

@@ -32,7 +32,12 @@ impl Bot {
         Ok(result?)
     }
 
-    pub async fn send_message(&self, chat_id: &str, text: &str, url: &str) -> Result<Message, Error> {
+    pub async fn send_message(
+        &self,
+        chat_id: &str,
+        text: &str,
+        url: &str,
+    ) -> Result<Message, Error> {
         let button = ReplyMarkup::InlineKeyboard(InlineKeyboardMarkup {
             inline_keyboard: vec![vec![InlineKeyboardButton {
                 text: "原始地址".to_owned(),
