@@ -1,9 +1,7 @@
 use failure::{format_err, Error};
-use libxml::{
-    parser::Parser,
-    tree::{self, Document, NodeType},
-    xpath::Context,
-};
+use libxml::parser::Parser;
+use libxml::tree::{self, Document, NodeType};
+use libxml::xpath::Context;
 use std::{fmt, ops::Deref, rc::Rc};
 
 #[derive(Debug)]

@@ -1,34 +1,28 @@
-#[macro_use]
-extern crate log;
-#[macro_use]
-extern crate lazy_static;
+use crate::config::Config;
+use crate::exhentai::*;
+use crate::telegram::Bot;
 
-use crate::{
-    config::Config,
-    exhentai::{BasicGalleryInfo, ExHentai, FullGalleryInfo},
-    telegram::Bot,
-};
 use chrono::{prelude::*, Duration};
 use failure::{format_err, Error};
 use futures::prelude::*;
+use lazy_static::lazy_static;
+use log::{debug, error, info};
 use reqwest::Client;
-use sled::Db;
-use std::{
-    collections::HashMap,
-    env,
-    fs::{create_dir_all, File},
-    io::{Read, Write},
-    path::Path,
-    sync::{
-        atomic::{AtomicU32, Ordering::SeqCst},
-        Arc,
-    },
-    time,
-};
-use telegraph_rs::{html_to_node, Telegraph, UploadResult};
+use telegraph_rs::{html_to_node, Page, Telegraph, UploadResult};
 use tempfile::NamedTempFile;
 use tokio::timer::delay_for;
 use v_htmlescape::escape;
+
+use std::collections::HashMap;
+use std::env;
+use std::fs::{create_dir_all, File};
+use std::io::{Read, Write};
+use std::path::Path;
+use std::sync::{
+    atomic::{AtomicU32, Ordering::SeqCst},
+    Arc,
+};
+use std::time;
 
 mod config;
 mod exhentai;
@@ -40,7 +34,7 @@ lazy_static! {
         eprintln!("配置文件解析失败:\n{}", e);
         std::process::exit(1);
     });
-    static ref DB: Db = Db::open("./db").expect("无法打开数据库");
+    static ref DB: sled::Db = sled::Db::open("./db").expect("无法打开数据库");
 }
 
 /// 通过 URL 上传图片至 telegraph
@@ -231,6 +225,14 @@ impl ExLoli {
         self.upload_gallery_to_telegram(&gallery).await
     }
 
+    fn cap_img_pages<'a>(&self, img_pages: &'a [String]) -> &'a [String] {
+        let actual_img_cnt = img_pages.len();
+        let allow_img_cnt = self.config.exhentai.max_img_cnt;
+        let final_img_cnt = std::cmp::min(actual_img_cnt, allow_img_cnt);
+        info!("保留图片数量: {}", final_img_cnt);
+        &img_pages[..final_img_cnt]
+    }
+
     async fn upload_gallery_to_telegram<'a>(
         &'a self,
         gallery: &BasicGalleryInfo<'a>,
@@ -245,28 +247,18 @@ impl ExLoli {
             return self.publish_to_telegram(&gallery_info, &article_url).await;
         }
 
-        let actual_img_cnt = gallery_info.img_pages.len();
-        let max_img_cnt = self.config.exhentai.max_img_cnt;
-        let max_length = std::cmp::min(actual_img_cnt, max_img_cnt);
-
-        let img_pages = &gallery_info.img_pages[..max_length];
-        info!("保留图片数量: {}", max_length);
-
+        let img_pages = self.cap_img_pages(&gallery_info.img_pages);
         let img_urls = get_img_urls(gallery, img_pages).await;
 
         if !self.config.telegraph.upload {
             return Ok(());
         }
 
-        info!("发表文章");
-        let mut content = img_urls_to_html(&img_urls);
-        if actual_img_cnt > max_img_cnt {
-            content.push_str(r#"<p>图片数量过多, 只显示部分. 完整版请前往 E 站观看.</p>"#);
-        }
+        let overflow = img_pages.len() != gallery_info.img_pages.len();
         let page = self
-            .telegraph
-            .create_page(&gallery_info.title, &html_to_node(&content), false)
+            .publish_to_telegraph(&gallery_info, &img_urls, overflow)
             .await?;
+
         info!("文章地址: {}", page.url);
         DB.insert(gallery.url.as_bytes(), page.url.as_bytes())
             .expect("插入失败");
@@ -274,11 +266,29 @@ impl ExLoli {
         self.publish_to_telegram(&gallery_info, &page.url).await
     }
 
+    async fn publish_to_telegraph(
+        &self,
+        gallery: &FullGalleryInfo,
+        img_urls: &[String],
+        overflow: bool,
+    ) -> Result<Page, Error> {
+        info!("上传到 Telegraph");
+        let mut content = img_urls_to_html(&img_urls);
+        if overflow {
+            content.push_str(r#"<p>图片数量过多, 只显示部分. 完整版请前往 E 站观看.</p>"#);
+        }
+        self.telegraph
+            .create_page(&gallery.title, &html_to_node(&content), false)
+            .await
+            .map_err(|e| e.into())
+    }
+
     async fn publish_to_telegram(
         &self,
         gallery: &FullGalleryInfo,
         article: &str,
     ) -> Result<(), Error> {
+        info!("发布到 Telegram 频道");
         let tags = tags_to_string(&gallery.tags);
         let text = format!(
             "{}\n<a href=\"{}\">{}</a>",

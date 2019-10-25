@@ -2,10 +2,9 @@ use crate::xpath::parse_html;
 use chrono::prelude::*;
 use failure::Error;
 use lazy_static::lazy_static;
-use reqwest::{
-    header::{self, HeaderMap, HeaderValue},
-    Client, RedirectPolicy,
-};
+use log::{debug, error, info};
+use reqwest::header::{self, HeaderMap, HeaderValue};
+use reqwest::{Client, RedirectPolicy};
 use std::collections::HashMap;
 
 macro_rules! set_header {
