@@ -17,6 +17,7 @@ pub struct Config {
 pub struct ExHentai {
     pub username: String,
     pub password: String,
+    pub cookie: Option<String>,
     pub keyword: String,
     pub search_watched: bool,
     pub max_img_cnt: usize,
@@ -57,12 +58,17 @@ impl Config {
 
     pub async fn init_exhentai(&self) -> Result<crate::exhentai::ExHentai, Error> {
         let exhentai = &self.exhentai;
-        Ok(crate::exhentai::ExHentai::new(
-            &exhentai.username,
-            &exhentai.password,
-            exhentai.search_watched,
-        )
-        .await?)
+
+        if let Some(cookie) = &exhentai.cookie {
+            crate::exhentai::ExHentai::from_cookie(cookie, exhentai.search_watched).await
+        } else {
+            crate::exhentai::ExHentai::new(
+                &exhentai.username,
+                &exhentai.password,
+                exhentai.search_watched,
+            )
+            .await
+        }
     }
 
     pub fn init_telegram(&self) -> crate::telegram::Bot {

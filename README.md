@@ -31,6 +31,8 @@ threads_num = "4"
 username = "username"
 # E 站密码
 password = "password"
+# 可选, 使用 cookie 登录
+cookie = "ipb_member_id=xx; ipb_pass_hash=xx; igneous=xx;"
 # 搜索关键词
 keyword = "female:lolicon language:Chinese"
 # 是否在 Watched 页面搜索 (默认在首页搜索

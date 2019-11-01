@@ -151,12 +151,12 @@ impl ExHentai {
         let client = Client::builder()
             .redirect(custom)
             .cookie_store(true)
+            .default_headers(HEADERS.clone())
             .build()?;
         info!("登录表站...");
         // 登录表站, 获得 cookie
         let _response = client
             .post("https://forums.e-hentai.org/index.php")
-            .headers(HEADERS.clone())
             .query(&[("act", "Login"), ("CODE", "01")])
             .form(&[
                 ("CookieDate", "1"),
@@ -173,6 +173,32 @@ impl ExHentai {
         // 访问里站, 取得必要的 cookie
         let _response = client.get("https://exhentai.org").send().await?;
         // 获得过滤设置相关的 cookie ?
+        let _response = client
+            .get("https://exhentai.org/uconfig.php")
+            .send()
+            .await?;
+        info!("登录成功!");
+
+        Ok(Self {
+            client,
+            search_page: if search_watched {
+                "https://exhentai.org/watched".to_owned()
+            } else {
+                "https://exhentai.org".to_owned()
+            },
+        })
+    }
+
+    /// 直接通过 cookie 登录
+    pub async fn from_cookie(cookie: &str, search_watched: bool) -> Result<Self, Error> {
+        let mut headers = HEADERS.clone();
+        headers.insert(header::COOKIE, HeaderValue::from_str(cookie)?);
+
+        let client = Client::builder()
+            .cookie_store(true)
+            .default_headers(headers)
+            .build()?;
+
         let _response = client
             .get("https://exhentai.org/uconfig.php")
             .send()
