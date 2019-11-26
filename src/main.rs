@@ -305,6 +305,29 @@ impl ExLoli {
     }
 }
 
+fn dump_db() -> Result<(), Error> {
+    let mut map = HashMap::new();
+    for i in DB.iter() {
+        let (k, v) = i?;
+        let k = String::from_utf8(k.to_vec()).unwrap_or_default();
+        let v = String::from_utf8(v.to_vec()).unwrap_or_default();
+        map.insert(k, v);
+    }
+    let string = serde_json::to_string_pretty(&map)?;
+    println!("{}", string);
+    Ok(())
+}
+
+fn load_db(file: &str) -> Result<(), Error> {
+    let file = File::open(file)?;
+    let map: HashMap<String, String> = serde_json::from_reader(file)?;
+    for (k, v) in map.iter() {
+        DB.insert(k.as_bytes(), v.as_bytes())?;
+    }
+    DB.flush()?;
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() {
     let exloli = ExLoli::new().await.unwrap_or_else(|e| {
@@ -320,6 +343,10 @@ async fn main() {
     for _ in 0..3i32 {
         let result = if args.len() == 3 && args[1] == "upload" {
             exloli.upload_gallery_by_url(&args[2]).await
+        } else if args.len() == 2 && args[1] == "dump" {
+            dump_db()
+        } else if args.len() == 3 && args[1] == "load" {
+            load_db(&args[2])
         } else {
             exloli.scan_and_upload().await
         };
