@@ -1,6 +1,7 @@
 use crate::config::Config;
 use crate::exhentai::*;
 use crate::telegram::Bot;
+use crate::trans::TRANS;
 
 use chrono::{prelude::*, Duration};
 use failure::{format_err, Error};
@@ -27,6 +28,7 @@ use std::time;
 mod config;
 mod exhentai;
 mod telegram;
+mod trans;
 mod xpath;
 
 lazy_static! {
@@ -80,12 +82,12 @@ fn tags_to_string(tags: &HashMap<String, Vec<String>>) -> String {
             let v = v
                 .iter()
                 .map(|s| {
-                    let s = s.replace(' ', "_").replace("_|_", " #").replace('-', "_");
+                    let s = TRANS.trans(k, s);
                     format!("#{}", s)
                 })
                 .collect::<Vec<_>>()
                 .join(" ");
-            format!("<code>{:>9}</code>: {}", k, v)
+            format!("<code>{:>5}</code>: {}", TRANS.trans("rows", k), v)
         })
         .collect::<Vec<_>>()
         .join("\n")
