@@ -82,7 +82,11 @@ fn tags_to_string(tags: &HashMap<String, Vec<String>>) -> String {
             let v = v
                 .iter()
                 .map(|s| {
-                    let s = TRANS.trans(k, s);
+                    let s = TRANS
+                        .trans(k, s)
+                        .replace(" ", "_")
+                        .replace("_|_", " #")
+                        .replace("-", "_");
                     format!("#{}", s)
                 })
                 .collect::<Vec<_>>()
