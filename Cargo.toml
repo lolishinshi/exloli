@@ -32,4 +32,4 @@ futures-preview = "0.3.0-alpha.19"
 # 日志
 log = "0.4.8"
 env_logger = "0.7.1"
-sled = "0.29.1"
+sled = "0.30.1"
