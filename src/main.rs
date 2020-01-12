@@ -11,7 +11,7 @@ use log::{debug, error, info};
 use reqwest::Client;
 use telegraph_rs::{html_to_node, Page, Telegraph, UploadResult};
 use tempfile::NamedTempFile;
-use tokio::timer::delay_for;
+use tokio::time::delay_for;
 use v_htmlescape::escape;
 
 use std::collections::HashMap;
@@ -36,7 +36,7 @@ lazy_static! {
         eprintln!("配置文件解析失败:\n{}", e);
         std::process::exit(1);
     });
-    static ref DB: sled::Db = sled::Db::open("./db").expect("无法打开数据库");
+    static ref DB: sled::Db = sled::open("./db").expect("无法打开数据库");
 }
 
 /// 通过 URL 上传图片至 telegraph
@@ -82,11 +82,11 @@ fn tags_to_string(tags: &HashMap<String, Vec<String>>) -> String {
             let v = v
                 .iter()
                 .map(|s| {
-                    let s = TRANS
-                        .trans(k, s)
-                        .replace(" ", "_")
-                        .replace("_|_", " #")
-                        .replace("-", "_");
+                    let trans = vec![(" ", "_"), ("_|_", " #"), ("-", "_"), ("/", "_"), ("·", "_")];
+                    let mut s = TRANS.trans(k, s).to_owned();
+                    for (from, to) in trans {
+                        s = s.replace(from, to);
+                    }
                     format!("#{}", s)
                 })
                 .collect::<Vec<_>>()

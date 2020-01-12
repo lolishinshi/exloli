@@ -4,7 +4,7 @@ use failure::Error;
 use lazy_static::lazy_static;
 use log::{debug, error, info};
 use reqwest::header::{self, HeaderMap, HeaderValue};
-use reqwest::{Client, RedirectPolicy};
+use reqwest::{Client, redirect::Policy};
 use std::collections::HashMap;
 
 macro_rules! set_header {
@@ -140,9 +140,9 @@ impl ExHentai {
     pub async fn new(username: &str, password: &str, search_watched: bool) -> Result<Self, Error> {
         // 此处手动设置重定向, 因为 reqwest 的默认重定向处理策略会把相同 URL 直接判定为无限循环
         // 然而其实 COOKIE 变了, 所以不会无限循环
-        let custom = RedirectPolicy::custom(|attempt| {
+        let custom = Policy::custom(|attempt| {
             if attempt.previous().len() > 3 {
-                attempt.too_many_redirects()
+                attempt.error("too many redirects")
             } else {
                 attempt.follow()
             }

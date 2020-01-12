@@ -26,10 +26,11 @@ failure = "0.1.5"
 lazy_static = "1.4.0"
 chrono = "0.4.9"
 telegraph-rs = { version = "0.4.0", git = "https://github.com/Aloxaf/telegraph-rs" }
-tokio = "0.2.0-alpha.6"
-futures-preview = "0.3.0-alpha.19"
+tokio = { version = "0.2.9", features = ["tcp", "time", "rt-threaded", "macros"] }
+futures = "0.3.1"
 
 # 日志
 log = "0.4.8"
 env_logger = "0.7.1"
-sled = "0.29.1"
+sled = "0.30.3"
+
