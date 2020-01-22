@@ -26,7 +26,7 @@ failure = "0.1.5"
 lazy_static = "1.4.0"
 chrono = "0.4.9"
 telegraph-rs = { version = "0.4.0", git = "https://github.com/Aloxaf/telegraph-rs" }
-tokio = { version = "0.2.9", features = ["tcp", "time", "rt-threaded", "macros"] }
+tokio = { version = "0.2.10", features = ["tcp", "time", "rt-threaded", "macros"] }
 futures = "0.3.1"
 
 # 日志
