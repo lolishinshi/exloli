@@ -1,4 +1,4 @@
-use failure::Error;
+use anyhow::Error;
 use serde::Deserialize;
 use std::{fs::File, io::Read, path::Path};
 

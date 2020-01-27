@@ -4,7 +4,7 @@ use crate::telegram::Bot;
 use crate::trans::TRANS;
 
 use chrono::{prelude::*, Duration};
-use failure::{format_err, Error};
+use anyhow::{format_err, Error};
 use futures::prelude::*;
 use lazy_static::lazy_static;
 use log::{debug, error, info};

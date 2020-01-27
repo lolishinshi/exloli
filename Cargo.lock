@@ -271,10 +271,10 @@ dependencies = [
 name = "exloli"
 version = "0.3.0"
 dependencies = [
+ "anyhow 1.0.26 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "color-backtrace 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "failure 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "libxml 0.2.13 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -289,26 +289,6 @@ dependencies = [
  "tokio 0.2.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "toml 0.5.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "v_htmlescape 0.4.5 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "failure"
-version = "0.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-dependencies = [
- "backtrace 0.3.40 (registry+https://github.com/rust-lang/crates.io-index)",
- "failure_derive 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "failure_derive"
-version = "0.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-dependencies = [
- "proc-macro2 1.0.7 (registry+https://github.com/rust-lang/crates.io-index)",
- "quote 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "syn 1.0.13 (registry+https://github.com/rust-lang/crates.io-index)",
- "synstructure 0.12.3 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1314,17 +1294,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "synstructure"
-version = "0.12.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-dependencies = [
- "proc-macro2 1.0.7 (registry+https://github.com/rust-lang/crates.io-index)",
- "quote 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "syn 1.0.13 (registry+https://github.com/rust-lang/crates.io-index)",
- "unicode-xid 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
 name = "telegram_types"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1752,8 +1721,6 @@ dependencies = [
 "checksum encoding_rs 0.8.22 (registry+https://github.com/rust-lang/crates.io-index)" = "cd8d03faa7fe0c1431609dfad7bbe827af30f82e1e2ae6f7ee4fca6bd764bc28"
 "checksum env_logger 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)" = "44533bbbb3bb3c1fa17d9f2e4e38bbbaf8396ba82193c4cb1b6445d711445d36"
 "checksum error-chain 0.12.1 (registry+https://github.com/rust-lang/crates.io-index)" = "3ab49e9dcb602294bc42f9a7dfc9bc6e936fca4418ea300dbfb84fe16de0b7d9"
-"checksum failure 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)" = "f8273f13c977665c5db7eb2b99ae520952fe5ac831ae4cd09d80c4c7042b5ed9"
-"checksum failure_derive 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)" = "0bc225b78e0391e4b8683440bf2e63c2deeeb2ce5189eab46e2b68c6d3725d08"
 "checksum fallible-iterator 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "4443176a9f2c162692bd3d352d745ef9413eec5782a80d8fd6f8a1ac692a07f7"
 "checksum findshlibs 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)" = "b1260d61e4fe2a6ab845ffdc426a0bd68ffb240b91cf0ec5a8d1170cec535bd8"
 "checksum flate2 1.0.13 (registry+https://github.com/rust-lang/crates.io-index)" = "6bd6d6f4752952feb71363cffc9ebac9411b75b87c6ab6058c40c8900cf43c0f"
@@ -1870,7 +1837,6 @@ dependencies = [
 "checksum stable_deref_trait 1.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "dba1a27d3efae4351c8051072d619e3ade2820635c3958d826bfea39d59b54c8"
 "checksum syn 0.15.44 (registry+https://github.com/rust-lang/crates.io-index)" = "9ca4b3b69a77cbe1ffc9e198781b7acb0c7365a883670e8f1c1bc66fba79a5c5"
 "checksum syn 1.0.13 (registry+https://github.com/rust-lang/crates.io-index)" = "1e4ff033220a41d1a57d8125eab57bf5263783dfdcc18688b1dacc6ce9651ef8"
-"checksum synstructure 0.12.3 (registry+https://github.com/rust-lang/crates.io-index)" = "67656ea1dc1b41b1451851562ea232ec2e5a80242139f7e679ceccfb5d61f545"
 "checksum telegram_types 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)" = "89fd41ee8d3078d66dbe24efe488469eda5c2df5d90cffb4f7c34ddb9c200622"
 "checksum telegraph-rs 0.4.0 (git+https://github.com/Aloxaf/telegraph-rs)" = "<none>"
 "checksum tempfile 3.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "7a6e24d9338a0a5be79593e2fa15a648add6138caa803e2d5bc782c371732ca9"

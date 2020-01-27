@@ -1,6 +1,6 @@
 use crate::xpath::parse_html;
 use chrono::prelude::*;
-use failure::Error;
+use anyhow::Error;
 use lazy_static::lazy_static;
 use log::{debug, error, info};
 use reqwest::header::{self, HeaderMap, HeaderValue};
@@ -25,7 +25,7 @@ lazy_static! {
         HOST => "exhentai.org",
         REFERER => "https://exhentai.org/",
         UPGRADE_INSECURE_REQUESTS => "1",
-        USER_AGENT => "Mozilla/5.0 (X11; Linux x86_64; rv:66.0) Gecko/20100101 Firefox/66.0"
+        USER_AGENT => "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:67.0) Gecko/20100101 Firefox/67.0"
     };
 }
 

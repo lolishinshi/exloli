@@ -1,4 +1,4 @@
-use failure::Error;
+use anyhow::Error;
 use reqwest::Client;
 use serde::de::DeserializeOwned;
 use telegram_types::bot::{methods::*, types::*};
