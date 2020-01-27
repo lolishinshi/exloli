@@ -20,6 +20,7 @@ pub struct ExHentai {
     pub cookie: Option<String>,
     pub keyword: String,
     pub search_watched: bool,
+    pub max_pages: i32,
     pub max_img_cnt: usize,
     pub local_cache: bool,
     pub cache_path: String,

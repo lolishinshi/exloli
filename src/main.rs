@@ -3,12 +3,11 @@ use crate::exhentai::*;
 use crate::telegram::Bot;
 use crate::trans::TRANS;
 
-use chrono::{prelude::*, Duration};
 use anyhow::{format_err, Error};
 use futures::prelude::*;
 use lazy_static::lazy_static;
 use log::{debug, error, info};
-use reqwest::Client;
+use reqwest::{Client, Response};
 use telegraph_rs::{html_to_node, Page, Telegraph, UploadResult};
 use tempfile::NamedTempFile;
 use tokio::time::delay_for;
@@ -17,7 +16,7 @@ use v_htmlescape::escape;
 use std::collections::HashMap;
 use std::env;
 use std::fs::{create_dir_all, File};
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::Path;
 use std::sync::{
     atomic::{AtomicU32, Ordering::SeqCst},
@@ -52,12 +51,10 @@ async fn upload_by_url(url: &str, path: &str) -> Result<UploadResult, Error> {
     let file = if Path::new(path).exists() {
         Path::new(path).to_owned()
     } else {
-        let response = client.get(url).send().await?;
-        let bytes = response.bytes().await?;
+        let bytes = client.get(url).send().and_then(Response::bytes).await?;
 
         if CONFIG.exhentai.local_cache {
-            let mut file = File::create(path)?;
-            file.write_all(bytes.as_ref())?;
+            File::create(path).and_then(|mut file| file.write_all(bytes.as_ref()))?;
             Path::new(path).to_owned()
         } else {
             tmp.write_all(bytes.as_ref())?;
@@ -67,7 +64,10 @@ async fn upload_by_url(url: &str, path: &str) -> Result<UploadResult, Error> {
 
     let result = if CONFIG.telegraph.upload {
         debug!("上传图片: {:?}", file);
-        Telegraph::upload(&[file]).await?.swap_remove(0)
+        Telegraph::upload(&[file])
+            .await
+            .map_err(|e| format_err!("上传 telegraph 失败: {}", e))?
+            .swap_remove(0)
     } else {
         UploadResult { src: "".to_owned() }
     };
@@ -82,7 +82,13 @@ fn tags_to_string(tags: &HashMap<String, Vec<String>>) -> String {
             let v = v
                 .iter()
                 .map(|s| {
-                    let trans = vec![(" ", "_"), ("_|_", " #"), ("-", "_"), ("/", "_"), ("·", "_")];
+                    let trans = vec![
+                        (" ", "_"),
+                        ("_|_", " #"),
+                        ("-", "_"),
+                        ("/", "_"),
+                        ("·", "_"),
+                    ];
                     let mut s = TRANS.trans(k, s).to_owned();
                     for (from, to) in trans {
                         s = s.replace(from, to);
@@ -95,18 +101,6 @@ fn tags_to_string(tags: &HashMap<String, Vec<String>>) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
-}
-
-/// 获取上一本爬取的本子的发布时间
-fn load_last_time() -> Result<DateTime<Local>, Error> {
-    if std::path::Path::new("./LAST_TIME").exists() {
-        let mut s = String::new();
-        std::fs::File::open("./LAST_TIME")?.read_to_string(&mut s)?;
-        Ok(s.parse::<DateTime<Local>>()?)
-    } else {
-        // 默认从两天前开始
-        Ok(Local::now() - Duration::days(2))
-    }
 }
 
 /// 将图片地址格式化为 html
@@ -134,20 +128,18 @@ async fn get_img_urls<'a>(gallery: &BasicGalleryInfo<'a>, img_pages: &[String]) 
         info!("第 {} / {} 张图片", now + 1, img_cnt);
     };
 
-    let get_image_url = |i: usize, url: String| {
-        async move {
-            let path = format!("{}/{}/{}", &CONFIG.exhentai.cache_path, &gallery.title, i);
-            match DB.get(&url) {
-                Ok(Some(v)) => {
-                    debug!("找到缓存!");
-                    Ok(String::from_utf8(v.to_vec()).expect("无法转为 UTF-8"))
-                }
-                _ => gallery
-                    .get_image_url(&url)
-                    .and_then(|img_url| async move { upload_by_url(&img_url, &path).await })
-                    .await
-                    .map(|result| result.src),
+    let get_image_url = |i: usize, url: String| async move {
+        let path = format!("{}/{}/{}", &CONFIG.exhentai.cache_path, &gallery.title, i);
+        match DB.get(&url) {
+            Ok(Some(v)) => {
+                debug!("找到缓存!");
+                Ok(String::from_utf8(v.to_vec()).expect("无法转为 UTF-8"))
             }
+            _ => gallery
+                .get_image_url(&url)
+                .and_then(|img_url| async move { upload_by_url(&img_url, &path).await })
+                .await
+                .map(|result| result.src),
         }
     };
 
@@ -210,17 +202,17 @@ impl ExLoli {
 
     async fn scan_and_upload(&self) -> Result<(), Error> {
         // 筛选最新本子
-        let last_time = load_last_time()?;
         let galleries = self
             .exhentai
-            .search_galleries_after(&self.config.exhentai.keyword, last_time)
+            .search_n_pages(&self.config.exhentai.keyword, CONFIG.exhentai.max_pages)
             .await?;
 
         // 从后往前爬, 防止半路失败导致进度记录错误
         for gallery in galleries.into_iter().rev() {
+            if DB.contains_key(gallery.url.as_bytes())? {
+                continue;
+            }
             self.upload_gallery_to_telegram(&gallery).await?;
-            std::fs::File::create("./LAST_TIME")?
-                .write_all(gallery.post_time.to_rfc3339().as_bytes())?;
         }
 
         Ok(())
@@ -345,14 +337,11 @@ async fn main() {
     // color_backtrace::install();
 
     for _ in 0..3i32 {
-        let result = if args.len() == 3 && args[1] == "upload" {
-            exloli.upload_gallery_by_url(&args[2]).await
-        } else if args.len() == 2 && args[1] == "dump" {
-            dump_db()
-        } else if args.len() == 3 && args[1] == "load" {
-            load_db(&args[2])
-        } else {
-            exloli.scan_and_upload().await
+        let result = match (args.len(), args.get(1).map(String::as_str).unwrap_or("")) {
+            (3, "upload") => exloli.upload_gallery_by_url(&args[2]).await,
+            (2, "dump") => dump_db(),
+            (3, "load") => load_db(&args[2]),
+            _ => exloli.scan_and_upload().await,
         };
 
         match result {

@@ -1,10 +1,9 @@
 use crate::xpath::parse_html;
-use chrono::prelude::*;
 use anyhow::Error;
 use lazy_static::lazy_static;
 use log::{debug, error, info};
 use reqwest::header::{self, HeaderMap, HeaderValue};
-use reqwest::{Client, redirect::Policy};
+use reqwest::{redirect::Policy, Client};
 use std::collections::HashMap;
 
 macro_rules! set_header {
@@ -37,8 +36,6 @@ pub struct BasicGalleryInfo<'a> {
     pub title: String,
     /// 画廊地址
     pub url: String,
-    /// 发布时间,
-    pub post_time: DateTime<Local>,
 }
 
 impl<'a> BasicGalleryInfo<'a> {
@@ -92,7 +89,6 @@ impl<'a> BasicGalleryInfo<'a> {
         Ok(FullGalleryInfo {
             title: self.title.clone(),
             url: self.url.clone(),
-            post_time: self.post_time,
             rating,
             fav_cnt,
             img_pages,
@@ -117,8 +113,6 @@ pub struct FullGalleryInfo {
     pub title: String,
     /// 画廊地址
     pub url: String,
-    /// 发布时间,
-    pub post_time: DateTime<Local>,
     /// 评分
     pub rating: String,
     /// 收藏次数
@@ -248,53 +242,29 @@ impl ExHentai {
                 .swap_remove(0);
             debug!("地址: {}", url);
 
-            let post_time = Local
-                .datetime_from_str(
-                    &gallery.xpath_text(
-                        r#".//td[@class="gl2c"]//div[contains(@id, "posted")]/text()"#,
-                    )?[0],
-                    "%Y-%m-%d %H:%M",
-                )
-                .expect("解析时间失败");
-            debug!("发布时间: {}", post_time);
-
             ret.push(BasicGalleryInfo {
                 client: &self.client,
                 title,
                 url,
-                post_time,
             })
         }
 
         Ok(ret)
     }
 
-    pub async fn search_galleries_after<'a>(
+    pub async fn search_n_pages<'a>(
         &'a self,
         keyword: &str,
-        time: DateTime<Local>,
+        n: i32,
     ) -> Result<Vec<BasicGalleryInfo<'a>>, Error> {
-        info!("搜索 {:?} 之前的本子", time);
-        // generator 还未稳定, 用 from_fn + flatten 凑合一下
+        info!("搜索前 {} 页本子", n);
         let mut result = vec![];
-        'l: for page in 0.. {
+        for page in 0..n {
             match self.search(keyword, page).await {
-                Ok(v) => {
-                    for gallery in v {
-                        // FIXME: 由于时间只精确到分钟, 此处存在极小的忽略掉本子的可能性
-                        if gallery.post_time <= time {
-                            break 'l;
-                        }
-                        result.push(gallery);
-                    }
-                }
-                Err(e) => {
-                    error!("{}", e);
-                    break;
-                }
+                Ok(v) => result.extend(v),
+                Err(e) => error!("{}", e),
             }
         }
-
         info!("找到 {} 本", result.len());
         Ok(result)
     }
@@ -311,8 +281,6 @@ impl ExHentai {
             client: &self.client,
             title,
             url: url.to_owned(),
-            // 不需要时间, 随便填一个吧
-            post_time: Local.datetime_from_str("1926-08-17 00:00", "%Y-%m-%d %H:%M")?,
         })
     }
 }
