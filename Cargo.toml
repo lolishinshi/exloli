@@ -10,7 +10,7 @@ edition = "2018"
 [dependencies]
 # 网络相关
 libxml = "0.2.13"
-reqwest = { version = "0.10.1", features = [ "json", "cookies", "gzip" ]}
+reqwest = { version = "0.10.1", features = [ "json", "cookies", "gzip" ] }
 tempfile = "3.1.0"
 telegram_types = "0.5.0"
 v_htmlescape = "0.4.5"
@@ -21,8 +21,8 @@ serde = { version = "1.0.101", features = ["derive"] }
 serde_json = "1.0.44"
 
 # 杂项
-color-backtrace = "0.3.0"
-failure = "0.1.5"
+# color-backtrace = "0.3.0"
+anyhow = "1.0.26"
 lazy_static = "1.4.0"
 chrono = "0.4.9"
 telegraph-rs = { version = "0.4.0", git = "https://github.com/Aloxaf/telegraph-rs" }
@@ -33,4 +33,3 @@ futures = "0.3.1"
 log = "0.4.8"
 env_logger = "0.7.1"
 sled = "0.30.3"
-

@@ -4,7 +4,7 @@ use crate::telegram::Bot;
 use crate::trans::TRANS;
 
 use chrono::{prelude::*, Duration};
-use failure::{format_err, Error};
+use anyhow::{format_err, Error};
 use futures::prelude::*;
 use lazy_static::lazy_static;
 use log::{debug, error, info};
@@ -342,7 +342,7 @@ async fn main() {
     let args = env::args().collect::<Vec<_>>();
     env::set_var("RUST_LOG", format!("exloli={}", exloli.config.log_level));
     env_logger::init();
-    color_backtrace::install();
+    // color_backtrace::install();
 
     for _ in 0..3i32 {
         let result = if args.len() == 3 && args[1] == "upload" {

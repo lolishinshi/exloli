@@ -1,4 +1,4 @@
-use failure::{format_err, Error};
+use anyhow::{format_err, Error};
 use libxml::parser::Parser;
 use libxml::tree::{self, Document, NodeType};
 use libxml::xpath::Context;
