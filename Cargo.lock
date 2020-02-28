@@ -1088,7 +1088,7 @@ dependencies = [
 [[package]]
 name = "telegraph-rs"
 version = "0.4.0"
-source = "git+https://github.com/Aloxaf/telegraph-rs#b8076d0d60f27bd21ef6bb18deec6bb935802f0b"
+source = "git+https://github.com/Aloxaf/telegraph-rs#6db996a53d58765a0b81da28d0c62474dc9ff51a"
 dependencies = [
  "libxml 0.2.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "mime_guess 2.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
