@@ -66,3 +66,16 @@ token = "TOKEN"
 ```
 
 抓取完会自动退出, 如果想要定时抓取需要自行设定计划任务.
+
+## 参数
+
+```zsh
+# 上传指定画廊
+exloli upload https://xxxx
+
+# 备份数据库
+exloli dump > db.bak.json
+
+# 恢复数据库
+exloli load db.bak.json
+```

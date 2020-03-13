@@ -51,14 +51,14 @@ impl Node {
     pub fn xpath_text(&self, xpath: &str) -> Result<Vec<String>, Error> {
         match self.xpath(xpath)?.into_text() {
             Some(v) => Ok(v),
-            None => Err(format_err!("not found")),
+            None => Err(format_err!("not found: {}", xpath)),
         }
     }
 
     pub fn xpath_elem(&self, xpath: &str) -> Result<Vec<Node>, Error> {
         match self.xpath(xpath)?.into_element() {
             Some(v) => Ok(v),
-            None => Err(format_err!("not found")),
+            None => Err(format_err!("not found: {}", xpath)),
         }
     }
 
@@ -66,7 +66,7 @@ impl Node {
         let nodes = self
             .context
             .node_evaluate(xpath, &self.node)
-            .map_err(|_| format_err!("failed to evaluate xpath"))?
+            .map_err(|_| format_err!("failed to evaluate xpath: {}", xpath))?
             .get_nodes_as_vec();
         let result = match nodes.get(0) {
             Some(node) => match node.get_type() {
