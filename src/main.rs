@@ -240,11 +240,6 @@ impl ExLoli {
 
         let gallery_info = gallery.get_full_info().await?;
 
-        if let Ok(Some(v)) = DB.get(&gallery.url) {
-            let article_url = String::from_utf8(v.to_vec()).expect("转 UTF-8 失败");
-            return self.publish_to_telegram(&gallery_info, &article_url).await;
-        }
-
         let img_pages = self.cap_img_pages(&gallery_info.img_pages);
         let img_urls = get_img_urls(gallery, img_pages).await;
 
@@ -258,6 +253,7 @@ impl ExLoli {
             .await?;
 
         info!("文章地址: {}", page.url);
+        // 由于画廊会更新，这个地址不能用于判断是否重复上传了，仅用于后续查询使用
         DB.insert(gallery.url.as_bytes(), page.url.as_bytes())
             .expect("插入失败");
 
