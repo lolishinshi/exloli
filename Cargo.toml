@@ -25,7 +25,7 @@ serde_json = "1.0.48"
 anyhow = "1.0.27"
 lazy_static = "1.4.0"
 telegraph-rs = { version = "0.4.0", git = "https://github.com/Aloxaf/telegraph-rs" }
-tokio = { version = "0.2.13", features = ["tcp", "time", "rt-threaded", "macros"] }
+tokio = { version = "0.2.14", features = ["tcp", "time", "rt-threaded", "macros"] }
 futures = "0.3.4"
 
 # 日志
