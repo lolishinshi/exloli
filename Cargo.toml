@@ -13,7 +13,7 @@ libxml = "0.2.14"
 reqwest = { version = "0.10.6", features = [ "json", "cookies", "gzip" ] }
 tempfile = "3.1.0"
 telegram_types = "0.5.0"
-v_htmlescape = "0.5.0"
+v_htmlescape = "0.7.0"
 
 # 配置文件解析
 toml = "0.5.6"
