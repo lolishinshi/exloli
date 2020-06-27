@@ -154,7 +154,7 @@ async fn get_img_urls<'a>(gallery: &BasicGalleryInfo<'a>, img_pages: &[String]) 
                     let img_url = get_image_url(i, url.to_owned()).await;
                     match img_url {
                         Ok(v) => {
-                            DB.insert(url, v.as_bytes()).expect("fail to insert");
+                            DB.insert(url, v.as_bytes()).expect("插入图片 URL 失败");
                             return Some(v);
                         }
                         Err(e) => {
@@ -316,7 +316,6 @@ fn load_db(file: &str) -> Result<(), Error> {
     for (k, v) in map.iter() {
         DB.insert(k.as_bytes(), v.as_bytes())?;
     }
-    DB.flush()?;
     Ok(())
 }
 
@@ -339,6 +338,9 @@ async fn main() {
             (3, "load") => load_db(&args[2]),
             _ => exloli.scan_and_upload().await,
         };
+
+        let b = DB.flush().expect("数据库写入失败");
+        debug!("数据库写入 {} 字节", b);
 
         match result {
             Ok(()) => {
