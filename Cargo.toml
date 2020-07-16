@@ -29,6 +29,6 @@ tokio = { version = "0.2.21", features = ["tcp", "time", "rt-threaded", "macros"
 futures = "0.3.5"
 
 # 日志
-log = "0.4.8"
+log = "0.4.11"
 env_logger = { version = "0.7.1", default-features = false, features = ["termcolor", "atty", "humantime"] }
 sled = "0.32.0"
