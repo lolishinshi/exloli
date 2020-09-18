@@ -241,6 +241,14 @@ impl ExLoli {
         let gallery_info = gallery.get_full_info().await?;
 
         let img_pages = self.cap_img_pages(&gallery_info.img_pages);
+        if let Some(len) = DB.get(gallery.title.as_bytes())? {
+            let bytes = [len[0], len[1], len[2], len[3], len[4], len[5], len[6], len[7]];
+            let len = usize::from_le_bytes(bytes);
+            if len >= self.config.exhentai.max_img_cnt {
+                return Ok(())
+            }
+        }
+
         let img_urls = get_img_urls(gallery, img_pages).await;
 
         if !self.config.telegraph.upload {
@@ -254,8 +262,8 @@ impl ExLoli {
 
         info!("文章地址: {}", page.url);
         // 由于画廊会更新，这个地址不能用于判断是否重复上传了，仅用于后续查询使用
-        DB.insert(gallery.url.as_bytes(), page.url.as_bytes())
-            .expect("插入失败");
+        DB.insert(gallery.url.as_bytes(), page.url.as_bytes())?;
+        DB.insert(gallery.title.as_bytes(), &img_pages.len().to_le_bytes())?;
 
         self.publish_to_telegram(&gallery_info, &page.url).await
     }

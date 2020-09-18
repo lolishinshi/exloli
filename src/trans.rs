@@ -32,7 +32,7 @@ pub struct Info {
 impl Database {
     pub fn trans<'a>(&'a self, namespace: &'a str, name: &'a str) -> &'a str {
         for data in &self.data {
-            if &data.namespace == namespace {
+            if data.namespace == namespace {
                 return data.trans(name);
             }
         }
