@@ -618,12 +618,13 @@ checksum = "f2f96b10ec2560088a8e76961b00d47107b3a625fecb76dedb29ee7ccbf98235"
 
 [[package]]
 name = "libxml"
-version = "0.2.14"
+version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56aa7ca31a98e8689fbb0647add450b1523e554c7c7c60d4ee51df32bb2c9566"
+checksum = "13d529280405174bd6f363d0f8a3086c27e6e60cc0efbc18cf94338f002f461b"
 dependencies = [
  "libc",
  "pkg-config",
+ "vcpkg",
 ]
 
 [[package]]
