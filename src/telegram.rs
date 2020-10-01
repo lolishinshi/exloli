@@ -36,17 +36,9 @@ impl Bot {
         &self,
         chat_id: &str,
         text: &str,
-        url: &str,
     ) -> Result<Message, Error> {
-        let button = ReplyMarkup::InlineKeyboard(InlineKeyboardMarkup {
-            inline_keyboard: vec![vec![InlineKeyboardButton {
-                text: "原始地址".to_owned(),
-                pressed: InlineKeyboardButtonPressed::Url(url.to_owned()),
-            }]],
-        });
         let message = SendMessage::new(ChatTarget::username(chat_id), text)
-            .parse_mode(ParseMode::HTML)
-            .reply_markup(button);
+            .parse_mode(ParseMode::HTML);
 
         self.make_request::<Message, _>(&message).await
     }

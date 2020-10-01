@@ -293,13 +293,14 @@ impl ExLoli {
         info!("发布到 Telegram 频道");
         let tags = tags_to_string(&gallery.tags);
         let text = format!(
-            "{}\n<a href=\"{}\">{}</a>",
+            "{0}\n<code>   预览</code>：<a href=\"{1}\">{2}</a>\n<code>原始地址</code>：<a href=\"{3}\">{3}</a>",
             tags,
             article,
-            escape(&gallery.title)
+            escape(&gallery.title),
+            gallery.url,
         );
         self.bot
-            .send_message(&self.config.telegram.channel_id, &text, &gallery.url)
+            .send_message(&self.config.telegram.channel_id, &text)
             .await?;
         Ok(())
     }
