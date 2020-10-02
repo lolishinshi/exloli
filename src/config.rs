@@ -1,6 +1,7 @@
 use anyhow::Error;
 use serde::Deserialize;
 use std::{fs::File, io::Read, path::Path};
+use teloxide::types::ChatId;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -8,6 +9,7 @@ pub struct Config {
     pub log_level: String,
     #[serde(default = "default_threads_num")]
     pub threads_num: usize,
+    pub interval: u64,
     pub exhentai: ExHentai,
     pub telegraph: Telegraph,
     pub telegram: Telegram,
@@ -24,6 +26,7 @@ pub struct ExHentai {
     pub max_img_cnt: usize,
     pub local_cache: bool,
     pub cache_path: String,
+    pub proxy: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -36,8 +39,10 @@ pub struct Telegraph {
 
 #[derive(Debug, Deserialize)]
 pub struct Telegram {
-    pub channel_id: String,
+    pub channel_id: ChatId,
     pub token: String,
+    pub group_id: ChatId,
+    pub owner: String,
 }
 
 impl Config {
@@ -70,10 +75,6 @@ impl Config {
             )
             .await
         }
-    }
-
-    pub fn init_telegram(&self) -> crate::telegram::Bot {
-        crate::telegram::Bot::new(&self.telegram.token)
     }
 }
 

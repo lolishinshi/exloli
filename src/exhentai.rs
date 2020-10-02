@@ -1,9 +1,10 @@
 use crate::xpath::parse_html;
+use crate::CONFIG;
 use anyhow::Error;
 use lazy_static::lazy_static;
 use log::{debug, error, info};
 use reqwest::header::{self, HeaderMap, HeaderValue};
-use reqwest::{redirect::Policy, Client};
+use reqwest::{redirect::Policy, Client, Proxy};
 use std::collections::HashMap;
 
 macro_rules! set_header {
@@ -81,9 +82,12 @@ impl<'a> BasicGalleryInfo<'a> {
             html.xpath_text(r#"//table[@class="ptt"]//td[last()]/a/@href"#)
         {
             debug!("下一页: {:?}", next_page);
-            let response = self.client.get(&next_page.swap_remove(0)).send().await?;
-            html = parse_html(response.text().await?)?;
-            img_pages.extend(html.xpath_text(r#"//div[@class="gdtl"]/a/@href"#)?)
+            // TODO: 这连着两个 block_on 太不优雅了
+            let response =
+                futures::executor::block_on(self.client.get(&next_page.swap_remove(0)).send())?;
+            let text = futures::executor::block_on(response.text())?;
+            html = parse_html(text)?;
+            img_pages.extend(html.xpath_text(r#"//div[@class="gdtl"]/a/@href"#)?);
         }
 
         Ok(FullGalleryInfo {
@@ -142,11 +146,15 @@ impl ExHentai {
             }
         });
 
-        let client = Client::builder()
+        let mut client = Client::builder()
             .redirect(custom)
             .cookie_store(true)
-            .default_headers(HEADERS.clone())
-            .build()?;
+            .default_headers(HEADERS.clone());
+        if let Some(proxy) = &CONFIG.exhentai.proxy {
+            client = client.proxy(Proxy::all(proxy)?)
+        }
+        let client = client.build()?;
+
         info!("登录表站...");
         // 登录表站, 获得 cookie
         let _response = client
@@ -188,10 +196,13 @@ impl ExHentai {
         let mut headers = HEADERS.clone();
         headers.insert(header::COOKIE, HeaderValue::from_str(cookie)?);
 
-        let client = Client::builder()
+        let mut client = Client::builder()
             .cookie_store(true)
-            .default_headers(headers)
-            .build()?;
+            .default_headers(headers);
+        if let Some(proxy) = &CONFIG.exhentai.proxy {
+            client = client.proxy(Proxy::all(proxy)?)
+        }
+        let client = client.build()?;
 
         let _response = client
             .get("https://exhentai.org/uconfig.php")

@@ -21,10 +21,12 @@ cargo install --git https://github.com/Aloxaf/exloli
 config.toml 模板如下
 
 ```toml
-# [可选] 日志等级, 可选 INFO, DEBUG, ERROR. 默认 INFO
+# 日志等级, 可选 INFO, DEBUG, ERROR. 默认 INFO
 log_level = "INFO"
-# [可选] 图片下载并发数. 默认 4
+# 图片下载并发数. 默认 4
 threads_num = "4"
+# 每隔多少秒检查一次，默认半小时
+interval = 1800
 
 [exhentai]
 # E 站用户名
@@ -62,10 +64,12 @@ author_url = "https://t.me/exlolicon"
 channel_id = "@exlolicon"
 # 机器人 token
 token = "TOKEN"
+# telegram 频道对应讨论组的 ID，暂时只能为数字
+group_id = -2147483647
+# bot 管理员
+owner = "username"
 
 ```
-
-抓取完会自动退出, 如果想要定时抓取需要自行设定计划任务.
 
 ## 参数
 
