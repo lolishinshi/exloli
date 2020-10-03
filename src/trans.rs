@@ -1,10 +1,10 @@
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use std::collections::HashMap;
+use std::fs::read_to_string;
 
 lazy_static! {
-    pub static ref TRANS: Database = serde_json::from_slice(include_bytes!("../db.text.json"))
-        .expect("Cannot parse translation database");
+    pub static ref TRANS: Database = Database::new();
 }
 
 #[derive(Deserialize)]
@@ -30,6 +30,11 @@ pub struct Info {
 }
 
 impl Database {
+    fn new() -> Self {
+        let text = read_to_string("db.text.json").expect("Cannot open db.text.json");
+        serde_json::from_slice(text.as_bytes()).expect("Cannot parse translation database")
+    }
+
     pub fn trans<'a>(&'a self, namespace: &'a str, name: &'a str) -> &'a str {
         for data in &self.data {
             if data.namespace == namespace {

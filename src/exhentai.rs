@@ -1,6 +1,7 @@
 use crate::xpath::parse_html;
 use crate::CONFIG;
-use anyhow::Error;
+use anyhow::{Context, Error};
+use futures::executor::block_on;
 use lazy_static::lazy_static;
 use log::{debug, error, info};
 use reqwest::header::{self, HeaderMap, HeaderValue};
@@ -62,7 +63,7 @@ impl<'a> BasicGalleryInfo<'a> {
         let rating = html.xpath_text(r#"//td[@id="rating_label"]/text()"#)?[0]
             .split(' ')
             .nth(1)
-            .unwrap()
+            .context("找不到评分")?
             .to_owned();
         debug!("评分: {}", rating);
 
@@ -70,7 +71,7 @@ impl<'a> BasicGalleryInfo<'a> {
         let fav_cnt = html.xpath_text(r#"//td[@id="favcount"]/text()"#)?[0]
             .split(' ')
             .next()
-            .unwrap()
+            .context("找不到收藏数")?
             .to_owned();
         debug!("收藏数: {}", fav_cnt);
 
@@ -78,14 +79,11 @@ impl<'a> BasicGalleryInfo<'a> {
         let mut img_pages = html.xpath_text(r#"//div[@class="gdtl"]/a/@href"#)?;
 
         // 继续翻页 (如果有
-        while let Ok(mut next_page) =
-            html.xpath_text(r#"//table[@class="ptt"]//td[last()]/a/@href"#)
-        {
+        while let Ok(next_page) = html.xpath_text(r#"//table[@class="ptt"]//td[last()]/a/@href"#) {
             debug!("下一页: {:?}", next_page);
-            // TODO: 这连着两个 block_on 太不优雅了
-            let response =
-                futures::executor::block_on(self.client.get(&next_page.swap_remove(0)).send())?;
-            let text = futures::executor::block_on(response.text())?;
+            // TODO: 这连着两个 block_on 太不优雅了，不过得益于开了更多更多缩略图，应该大部分时候都不需要翻页
+            let response = block_on(self.client.get(&next_page[0]).send())?;
+            let text = block_on(response.text())?;
             html = parse_html(text)?;
             img_pages.extend(html.xpath_text(r#"//div[@class="gdtl"]/a/@href"#)?);
         }
