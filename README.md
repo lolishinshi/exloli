@@ -16,7 +16,7 @@ cargo install --git https://github.com/Aloxaf/exloli
    私有 Channel 需要手动获取 chat id, 方法: 邀请 `@get_id_bot` 到 Channel 中, 然后发送 `/my_id@get_id_bot`
 2. 创建 Telegram Bot, 记录 TOKEN, 并拉进 Channel
 3. 创建 Telegraph 账号, 记录 TOKEN. 创建方法: 访问 `https://api.telegra.ph/createAccount?short_name={}&author_name={}&author_url={}`
-4. 在当前目录下建立 config.toml, 然后运行 exloli
+4. 在当前目录下建立 config.toml, 并将 db.text.json 复制一份，然后运行 exloli
 
 config.toml 模板如下
 
@@ -74,9 +74,6 @@ owner = "username"
 ## 参数
 
 ```zsh
-# 上传指定画廊
-exloli upload https://xxxx
-
 # 备份数据库
 exloli dump > db.bak.json
 
