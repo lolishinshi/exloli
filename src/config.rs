@@ -24,14 +24,11 @@ pub struct ExHentai {
     pub search_watched: bool,
     pub max_pages: i32,
     pub max_img_cnt: usize,
-    pub local_cache: bool,
-    pub cache_path: String,
     pub proxy: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Telegraph {
-    pub upload: bool,
     pub access_token: String,
     pub author_name: String,
     pub author_url: String,
@@ -40,6 +37,7 @@ pub struct Telegraph {
 #[derive(Debug, Deserialize)]
 pub struct Telegram {
     pub channel_id: ChatId,
+    pub bot_id: String,
     pub token: String,
     pub group_id: ChatId,
     pub owner: String,

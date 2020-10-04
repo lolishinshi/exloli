@@ -44,14 +44,8 @@ search_watched = false
 max_pages = 2
 # 最大展示的图片数量
 max_img_cnt = 50
-# 是否在本地缓存
-local_cache = false
-# 缓存位置
-cache_path = "./data"
 
 [telegraph]
-# 是否上传 telegraph
-upload = true
 # telegraph 账号 token
 access_token = "TOKEN"
 # 作者名称

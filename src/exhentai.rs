@@ -1,12 +1,21 @@
 use crate::xpath::parse_html;
-use crate::CONFIG;
-use anyhow::{Context, Error};
+use crate::{CONFIG, DB};
+use anyhow::{anyhow, Context, Result};
 use futures::executor::block_on;
+use futures::prelude::*;
 use lazy_static::lazy_static;
-use log::{debug, error, info};
+use log::{debug, error, info, trace};
 use reqwest::header::{self, HeaderMap, HeaderValue};
-use reqwest::{redirect::Policy, Client, Proxy};
+use reqwest::{redirect::Policy, Client, Proxy, Response};
+use telegraph_rs::Telegraph;
+use tempfile::NamedTempFile;
+use tokio::time::delay_for;
+
 use std::collections::HashMap;
+use std::io::Write;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
 
 macro_rules! set_header {
     ($($k:ident => $v:expr), *) => {{
@@ -42,7 +51,7 @@ pub struct BasicGalleryInfo<'a> {
 
 impl<'a> BasicGalleryInfo<'a> {
     /// 获取画廊的完整信息
-    pub async fn get_full_info(&self) -> Result<FullGalleryInfo, Error> {
+    pub async fn into_full_info(self) -> Result<FullGalleryInfo<'a>> {
         debug!("获取画廊信息: {}", self.url);
         let response = self.client.get(&self.url).send().await?;
         debug!("状态码: {}", response.status());
@@ -89,6 +98,7 @@ impl<'a> BasicGalleryInfo<'a> {
         }
 
         Ok(FullGalleryInfo {
+            client: self.client,
             title: self.title.clone(),
             url: self.url.clone(),
             rating,
@@ -97,20 +107,12 @@ impl<'a> BasicGalleryInfo<'a> {
             tags,
         })
     }
-
-    /// 根据图片页面的 URL 获取图片的真实地址
-    pub async fn get_image_url(&self, url: &str) -> Result<String, Error> {
-        debug!("获取图片真实地址");
-        let response = self.client.get(url).send().await?;
-        debug!("状态码: {}", response.status());
-        let html = parse_html(response.text().await?)?;
-        Ok(html.xpath_text(r#"//img[@id="img"]/@src"#)?.swap_remove(0))
-    }
 }
 
 /// 画廊信息
 #[derive(Debug)]
-pub struct FullGalleryInfo {
+pub struct FullGalleryInfo<'a> {
+    client: &'a Client,
     /// 画廊标题
     pub title: String,
     /// 画廊地址
@@ -125,6 +127,90 @@ pub struct FullGalleryInfo {
     pub img_pages: Vec<String>,
 }
 
+impl<'a> FullGalleryInfo<'a> {
+    /// 返回调整数量后的图片页面链接
+    pub fn get_image_lists(&self) -> &[String] {
+        let limit = CONFIG.exhentai.max_img_cnt;
+        let img_cnt = self.img_pages.len().min(limit);
+        info!("保留图片数量: {}", img_cnt);
+        &self.img_pages[..img_cnt]
+    }
+
+    /// 将画廊里的图片上传至 telegraph，返回上传后的图片链接
+    pub async fn upload_images_to_telegraph(&self) -> Result<Vec<String>> {
+        let img_pages = self.get_image_lists();
+        let img_cnt = img_pages.len();
+        let idx = Arc::new(AtomicU32::new(0));
+
+        let update_progress = || {
+            let now = idx.load(Ordering::SeqCst);
+            idx.store(now + 1, Ordering::SeqCst);
+            info!("第 {} / {} 张图片", now + 1, img_cnt);
+        };
+
+        let mut f = vec![];
+        for url in img_pages.iter() {
+            f.push(async move {
+                update_progress();
+                // TODO: 此处不应返回 None，上传失败时应该整体重来
+                for _ in 0..5i32 {
+                    let result = self.upload_image(url).await;
+                    match result {
+                        Ok(v) => {
+                            DB.insert(url, v.as_bytes()).expect("插入图片失败");
+                            return Some(v);
+                        }
+                        Err(e) => {
+                            error!("获取图片地址失败：{}", e);
+                            delay_for(Duration::from_secs(10)).await;
+                        }
+                    }
+                }
+                None
+            });
+        }
+
+        let ret = futures::stream::iter(f)
+            .buffered(CONFIG.threads_num)
+            .filter_map(|x| async move { x })
+            .collect::<Vec<_>>()
+            .await;
+
+        DB.flush_async().await.context("数据库写入失败")?;
+
+        Ok(ret)
+    }
+
+    /// 上传指定的图片并返回上传后的地址
+    pub async fn upload_image(&self, url: &str) -> Result<String> {
+        debug!("获取图片真实地址中：{}", url);
+        if let Ok(Some(v)) = DB.get(url) {
+            trace!("找到缓存!");
+            return Ok(String::from_utf8(v.to_vec())?);
+        }
+        let response = self.client.get(url).send().await?;
+        trace!("状态码: {}", response.status());
+
+        let url = parse_html(response.text().await?)?
+            .xpath_text(r#"//img[@id="img"]/@src"#)?
+            .swap_remove(0);
+
+        debug!("下载图片中：{}", &url);
+        // TODO: 是否有必要创建新的 client？
+        let client = Client::builder().timeout(Duration::from_secs(15)).build()?;
+        let bytes = client.get(&url).send().and_then(Response::bytes).await?;
+        let mut tmp = NamedTempFile::new()?;
+        tmp.write_all(bytes.as_ref())?;
+        let file = tmp.path().to_owned();
+
+        debug!("上传图片中...");
+        let mut result = Telegraph::upload(&[file])
+            .await
+            .map_err(|e| anyhow!("上传 telegraph 失败：{}", e))?;
+        Ok(result.swap_remove(0).src)
+    }
+}
+
 #[derive(Debug)]
 pub struct ExHentai {
     client: Client,
@@ -133,7 +219,7 @@ pub struct ExHentai {
 
 impl ExHentai {
     /// 登录 E-Hentai (能够访问 ExHentai 的前置条件
-    pub async fn new(username: &str, password: &str, search_watched: bool) -> Result<Self, Error> {
+    pub async fn new(username: &str, password: &str, search_watched: bool) -> Result<Self> {
         // 此处手动设置重定向, 因为 reqwest 的默认重定向处理策略会把相同 URL 直接判定为无限循环
         // 然而其实 COOKIE 变了, 所以不会无限循环
         let custom = Policy::custom(|attempt| {
@@ -190,7 +276,7 @@ impl ExHentai {
     }
 
     /// 直接通过 cookie 登录
-    pub async fn from_cookie(cookie: &str, search_watched: bool) -> Result<Self, Error> {
+    pub async fn from_cookie(cookie: &str, search_watched: bool) -> Result<Self> {
         let mut headers = HEADERS.clone();
         headers.insert(header::COOKIE, HeaderValue::from_str(cookie)?);
 
@@ -223,7 +309,7 @@ impl ExHentai {
         &'a self,
         keyword: &str,
         page: i32,
-    ) -> Result<Vec<BasicGalleryInfo<'a>>, Error> {
+    ) -> Result<Vec<BasicGalleryInfo<'a>>> {
         debug!("搜索 {} - {}", keyword, page);
         let response = self
             .client
@@ -265,7 +351,7 @@ impl ExHentai {
         &'a self,
         keyword: &str,
         n: i32,
-    ) -> Result<Vec<BasicGalleryInfo<'a>>, Error> {
+    ) -> Result<Vec<BasicGalleryInfo<'a>>> {
         info!("搜索前 {} 页本子", n);
         let mut result = vec![];
         for page in 0..n {
@@ -278,10 +364,7 @@ impl ExHentai {
         Ok(result)
     }
 
-    pub async fn get_gallery_by_url<'a>(
-        &'a self,
-        url: &str,
-    ) -> Result<BasicGalleryInfo<'a>, Error> {
+    pub async fn get_gallery_by_url<'a>(&'a self, url: &str) -> Result<BasicGalleryInfo<'a>> {
         info!("获取本子信息: {}", url);
         let response = self.client.get(url).send().await?;
         let html = parse_html(response.text().await?)?;

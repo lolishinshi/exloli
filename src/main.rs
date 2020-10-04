@@ -1,5 +1,3 @@
-#![type_length_limit = "9049659"]
-
 use crate::config::Config;
 use crate::exloli::ExLoli;
 
@@ -22,6 +20,7 @@ mod config;
 mod exhentai;
 mod exloli;
 mod trans;
+mod utils;
 mod xpath;
 
 lazy_static! {

@@ -1,64 +1,49 @@
 use crate::exloli::ExLoli;
+use crate::utils::MessageExt;
 use crate::*;
+use anyhow::Result;
 use std::sync::Arc;
-use teloxide::types::ChatId;
-use teloxide::types::*;
+use teloxide::utils::command::BotCommand;
 
-fn is_from_channel(message: &UpdateWithCx<Message>) -> bool {
-    if let MessageKind::Common(MessageCommon {
-        from: Some(user),
-        forward_kind: ForwardKind::Channel(ForwardChannel { chat, .. }),
-        ..
-    }) = &message.update.kind
-    {
-        return match &CONFIG.telegram.channel_id {
-            ChatId::Id(id) => user.id == 777000 && chat.id == *id,
-            ChatId::ChannelUsername(name) => {
-                if let ChatKind::Public(ChatPublic {
-                    kind:
-                        PublicChatKind::Channel(PublicChatChannel {
-                            username: Some(text),
-                            ..
-                        }),
-                    ..
-                }) = &chat.kind
-                {
-                    &name[1..] == text
-                } else {
-                    false
-                }
-            }
-            _ => false,
-        };
-    }
-    false
+#[derive(BotCommand, PartialEq, Debug)]
+#[command(rename = "lowercase", parse_with = "split")]
+enum RuaCommand {
+    Upload(String),
+    Ban,
 }
 
-fn get_admin_command(message: &UpdateWithCx<Message>) -> Option<String> {
-    if let Message {
-        chat,
-        kind:
-            MessageKind::Common(MessageCommon {
-                from: Some(user),
-                media_kind: MediaKind::Text(text),
-                ..
-            }),
-        ..
-    } = &message.update
-    {
-        if user.username.as_ref() == Some(&CONFIG.telegram.owner) && text.text.starts_with('/') {
-            return Some(text.text.to_owned());
-        }
-        if let ChatId::Id(id) = CONFIG.telegram.group_id {
-            if chat.id == id
-                && user.username == Some("GroupAnonymousBot".into())
-                && text.text.starts_with('/')
-            {
-                return Some(text.text.to_owned());
+async fn kick_user(message: &UpdateWithCx<Message>) -> ResponseResult<()> {
+    match message.update.reply_to_message() {
+        Some(reply) => {
+            if let Some(user) = reply.from() {
+                info!("踢出用户：{:?}", user);
+                message
+                    .bot
+                    .kick_chat_member(message.chat_id(), user.id)
+                    .send()
+                    .await?;
             }
+            Ok(())
         }
+        None => Ok(()),
     }
-    None
+}
+
+async fn send_pool(message: &UpdateWithCx<Message>) -> ResponseResult<Message> {
+    info!("频道消息更新，发送投票");
+    let options = vec![
+        "★".into(),
+        "★★".into(),
+        "★★★".into(),
+        "★★★★".into(),
+        "★★★★★".into(),
+    ];
+    message
+        .bot
+        .send_poll(message.update.chat.id, "你如何评价这本本子", options)
+        .reply_to_message_id(message.update.id)
+        .send()
+        .await
 }
 
 pub async fn start_bot(exloli: Arc<ExLoli>) {
@@ -67,30 +52,22 @@ pub async fn start_bot(exloli: Arc<ExLoli>) {
         let exloli = exloli.clone();
         async move {
             debug!("{:#?}", message.update);
-            if is_from_channel(&message) {
-                info!("频道消息更新，发送投票");
-                let options = vec![
-                    "★".into(),
-                    "★★".into(),
-                    "★★★".into(),
-                    "★★★★".into(),
-                    "★★★★★".into(),
-                ];
-                message
-                    .bot
-                    .send_poll(message.update.chat.id, "你如何评价这本本子", options)
-                    .reply_to_message_id(message.update.id)
-                    .send()
-                    .await?;
+            if message.update.is_from_channel() {
+                send_pool(&message).await?;
             }
-            if let Some(command) = get_admin_command(&message) {
-                info!("收到命令：{}", command);
-                let command = command.split_ascii_whitespace().collect::<Vec<_>>();
-                if command.len() == 2 && command[0] == "/upload" {
-                    message.reply_to("收到命令，上传中……").send().await?;
-                    if let Err(e) = exloli.upload_gallery_by_url(command[1]).await {
-                        error!("{}", e);
+            if let Some(command) = message.update.get_command() {
+                if message.update.is_from_admin() {
+                    return ResponseResult::<()>::Ok(());
+                }
+                info!("收到命令：{:?}", command);
+                match command {
+                    RuaCommand::Upload(url) => {
+                        message.reply_to("收到命令，上传中……").send().await?;
+                        if let Err(e) = exloli.upload_gallery_by_url(&url).await {
+                            error!("上传出错：{}", e);
+                        }
                     }
+                    RuaCommand::Ban => kick_user(&message).await?,
                 }
             }
             ResponseResult::<()>::Ok(())
