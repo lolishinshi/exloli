@@ -42,7 +42,8 @@ impl ExLoli {
 
     /// 上传指定 URL 的画廊
     pub async fn upload_gallery_by_url(&self, url: &str) -> Result<()> {
-        let gallery = self.exhentai.get_gallery_by_url(url).await?;
+        let mut gallery = self.exhentai.get_gallery_by_url(url).await?;
+        gallery.limit = false;
         self.upload_gallery_to_telegram(gallery).await
     }
 
@@ -107,7 +108,7 @@ impl ExLoli {
         info!("发布到 Telegram 频道");
         let tags = tags_to_string(&gallery.tags);
         let text = format!(
-            "{0}\n<code>   预览</code>：<a href=\"{1}\">{2}</a>\n<code>原始地址</code>：<a href=\"{3}\">{3}</a>",
+            "{0}\n<code>  预览</code>：<a href=\"{1}\">{2}</a>\n<code>原始地址</code>：<a href=\"{3}\">{3}</a>",
             tags,
             article,
             escape(&gallery.title),

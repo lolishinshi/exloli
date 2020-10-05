@@ -16,6 +16,7 @@ use std::io::Write;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::task::block_in_place;
 
 macro_rules! set_header {
     ($($k:ident => $v:expr), *) => {{
@@ -47,6 +48,8 @@ pub struct BasicGalleryInfo<'a> {
     pub title: String,
     /// 画廊地址
     pub url: String,
+    /// 是否限制图片数量
+    pub limit: bool,
 }
 
 impl<'a> BasicGalleryInfo<'a> {
@@ -90,9 +93,10 @@ impl<'a> BasicGalleryInfo<'a> {
         // 继续翻页 (如果有
         while let Ok(next_page) = html.xpath_text(r#"//table[@class="ptt"]//td[last()]/a/@href"#) {
             debug!("下一页: {:?}", next_page);
-            // TODO: 这连着两个 block_on 太不优雅了，不过得益于开了更多更多缩略图，应该大部分时候都不需要翻页
-            let response = block_on(self.client.get(&next_page[0]).send())?;
-            let text = block_on(response.text())?;
+            // TODO: 干掉此处的 block_on
+            let text = block_in_place(|| {
+                block_on(async { self.client.get(&next_page[0]).send().await?.text().await })
+            })?;
             html = parse_html(text)?;
             img_pages.extend(html.xpath_text(r#"//div[@class="gdtl"]/a/@href"#)?);
         }
@@ -101,6 +105,7 @@ impl<'a> BasicGalleryInfo<'a> {
             client: self.client,
             title: self.title.clone(),
             url: self.url.clone(),
+            limit: self.limit,
             rating,
             fav_cnt,
             img_pages,
@@ -125,11 +130,16 @@ pub struct FullGalleryInfo<'a> {
     pub tags: HashMap<String, Vec<String>>,
     /// 图片 URL
     pub img_pages: Vec<String>,
+    /// 是否限制图片数量
+    pub limit: bool,
 }
 
 impl<'a> FullGalleryInfo<'a> {
     /// 返回调整数量后的图片页面链接
     pub fn get_image_lists(&self) -> &[String] {
+        if !self.limit {
+            return &self.img_pages;
+        }
         let limit = CONFIG.exhentai.max_img_cnt;
         let img_cnt = self.img_pages.len().min(limit);
         info!("保留图片数量: {}", img_cnt);
@@ -341,6 +351,7 @@ impl ExHentai {
                 client: &self.client,
                 title,
                 url,
+                limit: true,
             })
         }
 
@@ -373,6 +384,7 @@ impl ExHentai {
             client: &self.client,
             title,
             url: url.to_owned(),
+            limit: true,
         })
     }
 }

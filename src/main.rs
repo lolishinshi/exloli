@@ -68,27 +68,36 @@ async fn main() {
         )
         .init();
 
-    let args = env::args().collect::<Vec<_>>();
-    if args.len() == 1 {
-        loop {
-            if let Err(e) = run().await {
-                error!("{}", e);
-            }
-            delay_for(time::Duration::from_secs(60)).await;
-        }
-    }
-
-    let result = match (args.len(), args.get(1).map(String::as_str)) {
-        (2, Some("dump")) => dump_db(),
-        (3, Some("load")) => load_db(&args[2]),
-        _ => Ok(()),
-    };
-    if let Err(e) = result {
+    if let Err(e) = run().await {
         error!("{}", e);
     }
 }
 
 async fn run() -> Result<(), Error> {
+    let args = env::args().collect::<Vec<_>>();
+    let mut opts = getopts::Options::new();
+    opts.optflag("", "dump", "导出数据库");
+    opts.optopt("", "load", "导入数据库", "PATH");
+    opts.optflag("", "debug", "调试模式");
+    opts.optflag("h", "help", "print this help menu");
+    let matches = match opts.parse(&args[1..]) {
+        Ok(v) => v,
+        Err(e) => panic!("{}", e),
+    };
+
+    if matches.opt_present("h") {
+        let brief = format!("Usage: {} [options]", args[0]);
+        print!("{}", opts.usage(&brief));
+        return Ok(());
+    } else if matches.opt_present("dump") {
+        info!("导出数据库");
+        return dump_db();
+    } else if let Some(name) = matches.opt_str("load") {
+        info!("导入数据库");
+        return load_db(&name);
+    }
+
+    let debug = matches.opt_present("debug");
     let exloli = Arc::new(ExLoli::new().await?);
 
     {
@@ -97,11 +106,13 @@ async fn run() -> Result<(), Error> {
     }
 
     loop {
-        let result = exloli.scan_and_upload().await;
-        if let Err(e) = result {
-            error!("定时更新出错：{}", e);
-        } else {
-            info!("定时更新完成");
+        if !debug {
+            let result = exloli.scan_and_upload().await;
+            if let Err(e) = result {
+                error!("定时更新出错：{}", e);
+            } else {
+                info!("定时更新完成");
+            }
         }
         info!("休眠中，预计 {} 分钟后开始工作", CONFIG.interval / 60);
         delay_for(time::Duration::from_secs(CONFIG.interval)).await;

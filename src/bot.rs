@@ -10,6 +10,7 @@ use teloxide::utils::command::BotCommand;
 enum RuaCommand {
     Upload(String),
     Ban,
+    Ping,
 }
 
 async fn kick_user(message: &UpdateWithCx<Message>) -> ResponseResult<()> {
@@ -56,7 +57,7 @@ pub async fn start_bot(exloli: Arc<ExLoli>) {
                 send_pool(&message).await?;
             }
             if let Some(command) = message.update.get_command() {
-                if message.update.is_from_admin() {
+                if !message.update.is_from_admin() {
                     return ResponseResult::<()>::Ok(());
                 }
                 info!("收到命令：{:?}", command);
@@ -68,6 +69,9 @@ pub async fn start_bot(exloli: Arc<ExLoli>) {
                         }
                     }
                     RuaCommand::Ban => kick_user(&message).await?,
+                    RuaCommand::Ping => {
+                        message.reply_to("pong").send().await?;
+                    }
                 }
             }
             ResponseResult::<()>::Ok(())

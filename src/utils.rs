@@ -1,5 +1,6 @@
 use crate::trans::TRANS;
 use crate::CONFIG;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use teloxide::types::{
     Chat, ChatId, ChatKind, ChatPublic, Message, PublicChatChannel, PublicChatKind,
@@ -13,6 +14,16 @@ pub fn img_urls_to_html(img_urls: &[String]) -> String {
         .map(|s| format!(r#"<img src="{}">"#, s))
         .collect::<Vec<_>>()
         .join("")
+}
+
+/// 左填充空格
+fn pad_left(s: &str, len: usize) -> Cow<str> {
+    let width = unicode_width::UnicodeWidthStr::width(s);
+    if width >= len {
+        Cow::Borrowed(s)
+    } else {
+        Cow::Owned(" ".repeat(len - width) + s)
+    }
 }
 
 /// 将 tag 转换为可以直接发送至 tg 的文本格式
@@ -37,7 +48,11 @@ pub fn tags_to_string(tags: &HashMap<String, Vec<String>>) -> String {
                 })
                 .collect::<Vec<_>>()
                 .join(" ");
-            format!("<code>{:>5}</code>: {}", TRANS.trans("rows", k), v)
+            format!(
+                "<code>{}</code>: {}",
+                pad_left(TRANS.trans("rows", k), 6),
+                v
+            )
         })
         .collect::<Vec<_>>()
         .join("\n")

@@ -289,6 +289,7 @@ dependencies = [
  "anyhow",
  "env_logger",
  "futures",
+ "getopts",
  "lazy_static",
  "libxml",
  "log",
@@ -297,12 +298,12 @@ dependencies = [
  "serde",
  "serde_json",
  "sled",
- "telegram_types",
  "telegraph-rs",
  "teloxide",
  "tempfile",
  "tokio",
  "toml",
+ "unicode-width",
  "v_htmlescape",
 ]
 
@@ -467,6 +468,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c31b6d751ae2c7f11320402d34e41349dd1016f8d5d45e48c4312bc8625af50c"
 dependencies = [
  "byteorder",
+]
+
+[[package]]
+name = "getopts"
+version = "0.2.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "14dbbfd5c71d70241ecf9e6f13737f7b5ce823821063188d7e46c41d371eebd5"
+dependencies = [
+ "unicode-width",
 ]
 
 [[package]]
@@ -1371,17 +1381,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "telegram_types"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89fd41ee8d3078d66dbe24efe488469eda5c2df5d90cffb4f7c34ddb9c200622"
-dependencies = [
- "serde",
- "serde_derive",
- "serde_json",
-]
-
-[[package]]
 name = "telegraph-rs"
 version = "0.4.0"
 source = "git+https://github.com/Aloxaf/telegraph-rs#b15731fefad0bed9e9fe6eb19bcb6cc940500372"
@@ -1669,6 +1668,12 @@ checksum = "6fb19cf769fa8c6a80a162df694621ebeb4dafb606470b2b2fce0be40a98a977"
 dependencies = [
  "tinyvec",
 ]
+
+[[package]]
+name = "unicode-width"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9337591893a19b88d8d87f2cec1e73fad5cdfd10e5a6f349f498ad6ea2ffb1e3"
 
 [[package]]
 name = "unicode-xid"
