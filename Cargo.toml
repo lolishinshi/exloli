@@ -12,7 +12,7 @@ edition = "2018"
 libxml = "0.2.15"
 reqwest = { version = "0.10.6", features = [ "json", "cookies", "gzip", "socks" ] }
 tempfile = "3.1.0"
-v_htmlescape = "0.10.0"
+v_htmlescape = "0.10.3"
 teloxide = "0.3.1"
 
 # 配置文件解析
