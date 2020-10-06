@@ -1,10 +1,7 @@
 use crate::trans::TRANS;
 use crate::CONFIG;
 use std::borrow::Cow;
-use std::collections::HashMap;
-use teloxide::types::{
-    Chat, ChatId, ChatKind, ChatPublic, Message, PublicChatChannel, PublicChatKind,
-};
+use teloxide::types::*;
 use teloxide::utils::command::BotCommand;
 
 /// 将图片地址格式化为 html
@@ -27,7 +24,7 @@ fn pad_left(s: &str, len: usize) -> Cow<str> {
 }
 
 /// 将 tag 转换为可以直接发送至 tg 的文本格式
-pub fn tags_to_string(tags: &HashMap<String, Vec<String>>) -> String {
+pub fn tags_to_string(tags: &[(String, Vec<String>)]) -> String {
     let trans = vec![
         (" ", "_"),
         ("_|_", " #"),
@@ -61,7 +58,9 @@ pub fn tags_to_string(tags: &HashMap<String, Vec<String>>) -> String {
 pub trait MessageExt {
     fn is_from_admin(&self) -> bool;
     fn is_from_channel(&self) -> bool;
+    fn is_from_group(&self) -> bool;
     fn get_command<T: BotCommand>(&self) -> Option<T>;
+    fn from_username(&self) -> Option<&String>;
 }
 
 fn get_channel_name(chat: &Chat) -> Option<&str> {
@@ -111,11 +110,25 @@ impl MessageExt for Message {
         }
     }
 
+    fn is_from_group(&self) -> bool {
+        match CONFIG.telegram.group_id {
+            ChatId::Id(id) => self.chat.id == id,
+            _ => todo!(),
+        }
+    }
+
     fn get_command<T: BotCommand>(&self) -> Option<T> {
         if let Some(text) = self.text() {
             if text.starts_with('/') {
                 return T::parse(&text, &CONFIG.telegram.bot_id).ok();
             }
+        }
+        None
+    }
+
+    fn from_username(&self) -> Option<&String> {
+        if let Some(User { username, .. }) = self.from() {
+            return username.as_ref();
         }
         None
     }

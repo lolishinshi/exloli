@@ -61,7 +61,7 @@ impl ExLoli {
             ];
             let len = usize::from_le_bytes(bytes);
             if len >= CONFIG.exhentai.max_img_cnt {
-                return Ok(());
+                return Err(anyhow::anyhow!("AlreadyUpload"));
             }
         }
 

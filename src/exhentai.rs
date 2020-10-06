@@ -11,7 +11,6 @@ use telegraph_rs::Telegraph;
 use tempfile::NamedTempFile;
 use tokio::time::delay_for;
 
-use std::collections::HashMap;
 use std::io::Write;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
@@ -61,13 +60,13 @@ impl<'a> BasicGalleryInfo<'a> {
         let mut html = parse_html(response.text().await?)?;
 
         // 标签
-        let mut tags = HashMap::new();
+        let mut tags = vec![];
         for ele in html.xpath_elem(r#"//div[@id="taglist"]//tr"#)? {
             let tag_set_name = ele.xpath_text(r#"./td[1]/text()"#)?[0]
                 .trim_matches(':')
                 .to_owned();
             let tag = ele.xpath_text(r#"./td[2]/div/a/text()"#)?;
-            tags.insert(tag_set_name, tag);
+            tags.push((tag_set_name, tag));
         }
         debug!("tags: {:?}", tags);
 
@@ -127,7 +126,7 @@ pub struct FullGalleryInfo<'a> {
     /// 收藏次数
     pub fav_cnt: String,
     /// 标签
-    pub tags: HashMap<String, Vec<String>>,
+    pub tags: Vec<(String, Vec<String>)>,
     /// 图片 URL
     pub img_pages: Vec<String>,
     /// 是否限制图片数量
