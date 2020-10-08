@@ -4,7 +4,6 @@ use anyhow::{anyhow, Context, Result};
 use futures::executor::block_on;
 use futures::prelude::*;
 use lazy_static::lazy_static;
-use log::{debug, error, info, trace};
 use reqwest::header::{self, HeaderMap, HeaderValue};
 use reqwest::{redirect::Policy, Client, Proxy, Response};
 use telegraph_rs::Telegraph;
@@ -39,6 +38,7 @@ lazy_static! {
     };
 }
 
+// TODO： 通过调整搜索页面展示的信息将 tag 移到这里来
 /// 基本画廊信息
 #[derive(Debug, Clone)]
 pub struct BasicGalleryInfo<'a> {
@@ -166,7 +166,7 @@ impl<'a> FullGalleryInfo<'a> {
                     let result = self.upload_image(url).await;
                     match result {
                         Ok(v) => {
-                            DB.insert(url, v.as_bytes()).expect("插入图片失败");
+                            DB.insert_image(url, &v).expect("插入图片失败");
                             return Some(v);
                         }
                         Err(e) => {
@@ -185,17 +185,15 @@ impl<'a> FullGalleryInfo<'a> {
             .collect::<Vec<_>>()
             .await;
 
-        DB.flush_async().await.context("数据库写入失败")?;
-
         Ok(ret)
     }
 
     /// 上传指定的图片并返回上传后的地址
     pub async fn upload_image(&self, url: &str) -> Result<String> {
         debug!("获取图片真实地址中：{}", url);
-        if let Ok(Some(v)) = DB.get(url) {
+        if let Ok(image) = DB.query_image_by_url(url) {
             trace!("找到缓存!");
-            return Ok(String::from_utf8(v.to_vec())?);
+            return Ok(image.url);
         }
         let response = self.client.get(url).send().await?;
         trace!("状态码: {}", response.status());

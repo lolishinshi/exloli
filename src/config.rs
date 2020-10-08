@@ -5,11 +5,10 @@ use teloxide::types::ChatId;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    #[serde(default = "default_log_level")]
     pub log_level: String,
-    #[serde(default = "default_threads_num")]
     pub threads_num: usize,
     pub interval: u64,
+    pub database_url: String,
     pub exhentai: ExHentai,
     pub telegraph: Telegraph,
     pub telegram: Telegram,
@@ -74,14 +73,6 @@ impl Config {
             .await
         }
     }
-}
-
-fn default_threads_num() -> usize {
-    4
-}
-
-fn default_log_level() -> String {
-    "info".to_owned()
 }
 
 #[cfg(test)]

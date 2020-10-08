@@ -2,7 +2,6 @@ use crate::exhentai::*;
 use crate::utils::*;
 use crate::{BOT, CONFIG, DB};
 use anyhow::Result;
-use log::info;
 use telegraph_rs::{html_to_node, Page, Telegraph};
 use teloxide::prelude::*;
 use v_htmlescape::escape;
@@ -31,7 +30,7 @@ impl ExLoli {
 
         // 从后往前爬, 保持顺序
         for gallery in galleries.into_iter().rev() {
-            if DB.contains_key(gallery.url.as_bytes())? {
+            if DB.query_gallery_by_url(&gallery.url).is_ok() {
                 continue;
             }
             self.upload_gallery_to_telegram(gallery).await?;
@@ -55,12 +54,8 @@ impl ExLoli {
         let gallery = gallery.into_full_info().await?;
 
         // 判断是否上传过并且不需要更新
-        if let Some(len) = DB.get(gallery.title.as_bytes())? {
-            let bytes = [
-                len[0], len[1], len[2], len[3], len[4], len[5], len[6], len[7],
-            ];
-            let len = usize::from_le_bytes(bytes);
-            if len >= CONFIG.exhentai.max_img_cnt {
+        if let Ok(g) = DB.query_gallery_by_title(&gallery.title) {
+            if g.upload_images as usize >= CONFIG.exhentai.max_img_cnt {
                 return Err(anyhow::anyhow!("AlreadyUpload"));
             }
         }
@@ -72,13 +67,11 @@ impl ExLoli {
         let page = self
             .publish_to_telegraph(&gallery.title, &img_urls, overflow)
             .await?;
-
         info!("文章地址: {}", page.url);
-        // 由于画廊会更新，这个地址不能用于判断是否重复上传了，仅用于后续查询使用
-        DB.insert(gallery.url.as_bytes(), page.url.as_bytes())?;
-        DB.insert(gallery.title.as_bytes(), &img_cnt.to_le_bytes())?;
 
-        self.publish_to_telegram(&gallery, &page.url).await
+        let message = self.publish_to_telegram(&gallery, &page.url).await?;
+
+        DB.insert_gallery(&gallery, message.id)
     }
 
     /// 将画廊内容上传至 telegraph
@@ -104,7 +97,7 @@ impl ExLoli {
         &self,
         gallery: &FullGalleryInfo<'a>,
         article: &str,
-    ) -> Result<()> {
+    ) -> Result<Message> {
         info!("发布到 Telegram 频道");
         let tags = tags_to_string(&gallery.tags);
         let text = format!(
@@ -114,9 +107,9 @@ impl ExLoli {
             escape(&gallery.title),
             gallery.url,
         );
-        BOT.send_message(CONFIG.telegram.channel_id.clone(), &text)
+        Ok(BOT
+            .send_message(CONFIG.telegram.channel_id.clone(), &text)
             .send()
-            .await?;
-        Ok(())
+            .await?)
     }
 }

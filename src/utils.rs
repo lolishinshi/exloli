@@ -1,8 +1,6 @@
 use crate::trans::TRANS;
-use crate::CONFIG;
 use std::borrow::Cow;
-use teloxide::types::*;
-use teloxide::utils::command::BotCommand;
+use std::str::FromStr;
 
 /// 将图片地址格式化为 html
 pub fn img_urls_to_html(img_urls: &[String]) -> String {
@@ -55,81 +53,19 @@ pub fn tags_to_string(tags: &[(String, Vec<String>)]) -> String {
         .join("\n")
 }
 
-pub trait MessageExt {
-    fn is_from_admin(&self) -> bool;
-    fn is_from_channel(&self) -> bool;
-    fn is_from_group(&self) -> bool;
-    fn get_command<T: BotCommand>(&self) -> Option<T>;
-    fn from_username(&self) -> Option<&String>;
+/// 从 e 站 url 中获取数字格式的 id
+pub fn get_id_from_gallery(url: &str) -> i32 {
+    let url = url.split('/').collect::<Vec<_>>();
+    url[4].parse::<i32>().unwrap()
 }
 
-fn get_channel_name(chat: &Chat) -> Option<&str> {
-    match &chat.kind {
-        ChatKind::Public(ChatPublic {
-            kind:
-                PublicChatKind::Channel(PublicChatChannel {
-                    username: Some(text),
-                    ..
-                }),
-            ..
-        }) => Some(text),
-        _ => None,
-    }
-}
-
-impl MessageExt for Message {
-    fn is_from_admin(&self) -> bool {
-        if let Some(user) = self.from() {
-            user.username.as_ref() == Some(&CONFIG.telegram.owner)
-                || user.username == Some("GroupAnonymousBot".into())
-        } else {
-            false
-        }
-    }
-
-    fn is_from_channel(&self) -> bool {
-        let user = match self.from() {
-            Some(v) => v,
-            None => return false,
-        };
-        let chat = match self.forward_from_chat() {
-            Some(v) => v,
-            None => return false,
-        };
-
-        match &CONFIG.telegram.channel_id {
-            ChatId::Id(id) => user.id == 777000 && chat.id == *id,
-            ChatId::ChannelUsername(name) => {
-                if let Some(text) = get_channel_name(chat) {
-                    &name[1..] == text
-                } else {
-                    false
-                }
-            }
-            _ => false,
-        }
-    }
-
-    fn is_from_group(&self) -> bool {
-        match CONFIG.telegram.group_id {
-            ChatId::Id(id) => self.chat.id == id,
-            _ => todo!(),
-        }
-    }
-
-    fn get_command<T: BotCommand>(&self) -> Option<T> {
-        if let Some(text) = self.text() {
-            if text.starts_with('/') {
-                return T::parse(&text, &CONFIG.telegram.bot_id).ok();
-            }
-        }
-        None
-    }
-
-    fn from_username(&self) -> Option<&String> {
-        if let Some(User { username, .. }) = self.from() {
-            return username.as_ref();
-        }
-        None
-    }
+/// 从图片 url 中获取数字格式的 id，第一个为 id，第二个为图片序号
+pub fn get_id_from_image(url: &str) -> (i32, i32) {
+    let tmp = url.split('/').nth(5).unwrap();
+    let ids = tmp
+        .split('-')
+        .map(i32::from_str)
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    (ids[0], ids[1])
 }
