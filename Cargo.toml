@@ -21,7 +21,7 @@ serde = { version = "1.0.114", features = ["derive"] }
 serde_json = "1.0.57"
 
 # 杂项
-anyhow = "1.0.31"
+anyhow = "1.0.33"
 lazy_static = "1.4.0"
 telegraph-rs = "0.4.0"
 tokio = { version = "0.2.22", features = ["tcp", "time", "rt-threaded", "macros", "stream"] }
