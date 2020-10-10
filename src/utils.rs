@@ -53,10 +53,10 @@ pub fn tags_to_string(tags: &[(String, Vec<String>)]) -> String {
         .join("\n")
 }
 
-/// 从 e 站 url 中获取数字格式的 id
-pub fn get_id_from_gallery(url: &str) -> i32 {
+/// 从 e 站 url 中获取数字格式的 id，第二项为 token
+pub fn get_id_from_gallery(url: &str) -> (i32, &str) {
     let url = url.split('/').collect::<Vec<_>>();
-    url[4].parse::<i32>().unwrap()
+    (url[4].parse::<i32>().unwrap(), url[5])
 }
 
 /// 从图片 url 中获取数字格式的 id，第一个为 id，第二个为图片序号

@@ -17,19 +17,24 @@ macro_rules! unwrap {
             None => return Ok(()),
         }
     };
+    ($e:expr, $r:expr) => {
+        match $e {
+            Some(v) => v,
+            None => return $r,
+        }
+    };
 }
 
 pub trait MessageExt {
     fn is_from_root(&self) -> bool;
     fn is_from_owner(&self) -> bool;
-    fn is_from_channel(&self) -> bool;
     fn is_from_group(&self) -> bool;
     fn get_command<T: BotCommand>(&self) -> Option<T>;
     fn from_username(&self) -> Option<&String>;
     fn reply_to_user(&self) -> Option<&User>;
 }
 
-fn get_channel_name(chat: &Chat) -> Option<&str> {
+pub fn get_channel_name(chat: &Chat) -> Option<&str> {
     match &chat.kind {
         ChatKind::Public(ChatPublic {
             kind:
@@ -57,29 +62,6 @@ impl MessageExt for Message {
         self.from()
             .map(|u| u.username.as_ref() == Some(&CONFIG.telegram.owner))
             .unwrap_or(false)
-    }
-
-    fn is_from_channel(&self) -> bool {
-        let user = match self.from() {
-            Some(v) => v,
-            None => return false,
-        };
-        let chat = match self.forward_from_chat() {
-            Some(v) => v,
-            None => return false,
-        };
-
-        match &CONFIG.telegram.channel_id {
-            ChatId::Id(id) => user.id == 777000 && chat.id == *id,
-            ChatId::ChannelUsername(name) => {
-                if let Some(text) = get_channel_name(chat) {
-                    &name[1..] == text
-                } else {
-                    false
-                }
-            }
-            _ => false,
-        }
     }
 
     fn is_from_group(&self) -> bool {

@@ -71,7 +71,7 @@ impl ExLoli {
 
         let message = self.publish_to_telegram(&gallery, &page.url).await?;
 
-        DB.insert_gallery(&gallery, message.id)
+        DB.insert_gallery(&gallery, page.url, message.id)
     }
 
     /// 将画廊内容上传至 telegraph

@@ -1,8 +1,10 @@
 table! {
     gallery (gallery_id) {
         gallery_id -> Integer,
+        token -> Text,
         title -> Text,
         tags -> Text,
+        telegraph -> Text,
         upload_images -> SmallInt,
         publish_date -> Date,
         message_id -> Integer,

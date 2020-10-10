@@ -50,10 +50,10 @@ impl FromStr for Reason {
 #[command(rename = "lowercase", parse_with = "split")]
 enum RuaCommand {
     Upload(String),
+    Warn(Reason),
     Ban(Reason),
     Ping,
     Delete,
-    Warn(Reason),
 }
 
 async fn is_from_admin(message: &UpdateWithCx<Message>) -> Result<bool> {
@@ -68,6 +68,7 @@ async fn is_from_admin(message: &UpdateWithCx<Message>) -> Result<bool> {
     Ok(false)
 }
 
+/// 封禁用户
 async fn ban_user(message: &UpdateWithCx<Message>, reason: Option<String>) -> Result<()> {
     check_is_admin!(&message);
     match message.update.reply_to_user() {
@@ -84,23 +85,25 @@ async fn ban_user(message: &UpdateWithCx<Message>, reason: Option<String>) -> Re
             send!(message.reply_to("请回复需要被操作的用户"))?;
         }
     }
+    // 删除命令以及命令回复的消息
     let message_id = message.update.reply_to_message().unwrap().id;
     send!(message.bot.delete_message(message.chat_id(), message_id))?;
     send!(message.delete_message())?;
     Ok(())
 }
 
+/// 警告用户，三次警告以后直接踢出
+/// TODO: 警告次数定时重置
 async fn warn_user(message: &UpdateWithCx<Message>, reason: Option<String>) -> Result<()> {
     check_is_admin!(&message);
     match message.update.reply_to_user() {
         Some(user) => {
             info!("警告用户：{:?}", user);
             let warn = DB.add_warn(user.id)?;
-            let mut text = String::new();
-            text.push_str(&format!(
+            let mut text = format!(
                 "警告用户：<a href=\"tg://user?id={0}\">{0}</a>\n次数：{1}/3",
                 user.id, warn
-            ));
+            );
             if let Some(reason) = reason {
                 text.push_str(&format!("\n原因：{}", reason));
             }
@@ -114,6 +117,7 @@ async fn warn_user(message: &UpdateWithCx<Message>, reason: Option<String>) -> R
             send!(message.reply_to("请回复需要被操作的用户"))?;
         }
     }
+    // 删除命令以及命令回复的消息
     let message_id = message.update.reply_to_message().unwrap().id;
     send!(message.bot.delete_message(message.chat_id(), message_id))?;
     send!(message.delete_message())?;
@@ -123,11 +127,11 @@ async fn warn_user(message: &UpdateWithCx<Message>, reason: Option<String>) -> R
 async fn send_pool(message: &UpdateWithCx<Message>) -> Result<()> {
     info!("频道消息更新，发送投票");
     let options = vec![
-        "★".into(),
-        "★★".into(),
-        "★★★".into(),
-        "★★★★".into(),
-        "★★★★★".into(),
+        "我瞎了".into(),
+        "不咋样".into(),
+        "还行吧".into(),
+        "不错哦".into(),
+        "太棒了".into(),
     ];
     let poll = send!(message
         .bot
@@ -146,17 +150,20 @@ pub async fn upload_gallery(
 ) -> ResponseResult<()> {
     check_is_root!(&message);
     let mes = send!(message.reply_to("收到命令，上传中……"))?;
-    if let Err(e) = exloli.upload_gallery_by_url(&url).await {
-        if &*e.to_string() == "AlreadyUpload" {
-            send!(message.reply_to("已上传"))?;
-        }
-        error!("上传出错：{}", e);
-    }
-    let to_send = ChatOrInlineMessage::Chat {
+    let to_edit = ChatOrInlineMessage::Chat {
         chat_id: ChatId::Id(mes.chat.id),
         message_id: mes.id,
     };
-    send!(message.bot.edit_message_text(to_send, "上传完毕"))?;
+    let mut text = "上传完毕";
+    if let Err(e) = exloli.upload_gallery_by_url(&url).await {
+        error!("上传出错：{}", e);
+        if &*e.to_string() == "AlreadyUpload" {
+            text = "该画廊已上传过";
+        } else {
+            text = "上传失败，请稍后重试";
+        }
+    }
+    send!(message.bot.edit_message_text(to_edit, text))?;
     Ok(())
 }
 
@@ -176,18 +183,38 @@ async fn delete_gallery(message: &UpdateWithCx<Message>) -> Result<()> {
     Ok(())
 }
 
+/// 判断是否是新本子的发布信息
+fn is_new_gallery(message: &Message) -> bool {
+    // 判断是否是由官方 bot 转发的
+    let user = unwrap!(message.from(), false);
+    if user.id != 777000 {
+        return false;
+    }
+    // 判断是否是新本子的发布信息
+    message.text().map(|s| s.contains("原始地址")).unwrap_or(false)
+}
+
 async fn message_handler(exloli: Arc<ExLoli>, message: UpdateWithCx<Message>) -> Result<()> {
     use RuaCommand::*;
+
     debug!("{:#?}", message.update);
-    if message.update.is_from_channel()
-        && message
-            .update
-            .text()
-            .map(|s| s.contains("原始地址"))
-            .unwrap_or(false)
-    {
+
+    // 如果消息来源不是指定群组，直接忽略
+    match CONFIG.telegram.group_id {
+        ChatId::Id(v) => {
+            if message.chat_id() != v {
+                return Ok(())
+            }
+        }
+        _ => unimplemented!("group_id 只能为数字"),
+    }
+
+    // 如果是新本子上传的消息，则回复投票
+    if is_new_gallery(&message.update) {
         send_pool(&message).await.log_on_error().await;
     }
+
+    // 其他命令
     if let Some(command) = message.update.get_command() {
         info!("收到命令：{:?}", command);
         match command {

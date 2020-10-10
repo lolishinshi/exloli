@@ -12,8 +12,10 @@ use std::env;
 #[table_name = "gallery"]
 pub struct Gallery {
     pub gallery_id: i32,
+    pub token: String,
     pub title: String,
     pub tags: String,
+    pub telegraph: String,
     pub upload_images: i16,
     pub publish_date: NaiveDate,
     pub message_id: i32,
@@ -72,10 +74,20 @@ impl DataBase {
             .get_result::<Image>(&self.pool.get()?)?)
     }
 
-    pub fn insert_gallery(&self, info: &FullGalleryInfo, message_id: i32) -> Result<()> {
-        let id = get_id_from_gallery(&info.url);
+    pub fn reset_image_by_url(&self) {
+        todo!()
+    }
+
+    pub fn insert_gallery<S: Into<String>>(
+        &self,
+        info: &FullGalleryInfo,
+        telegraph: S,
+        message_id: i32,
+    ) -> Result<()> {
+        let (id, token) = get_id_from_gallery(&info.url);
         let gallery = Gallery {
             gallery_id: id,
+            token: token.to_owned(),
             title: info.title.to_owned(),
             tags: serde_json::to_string(&info.tags)?,
             publish_date: Utc::today().naive_utc(),
@@ -83,6 +95,7 @@ impl DataBase {
             message_id,
             upload_images: info.get_image_lists().len() as i16,
             poll_id: "".to_string(),
+            telegraph: telegraph.into(),
         };
         diesel::insert_or_ignore_into(gallery::table)
             .values(&gallery)
@@ -107,7 +120,7 @@ impl DataBase {
     }
 
     pub fn query_gallery_by_url(&self, url: &str) -> Result<Gallery> {
-        let id = get_id_from_gallery(url);
+        let (id, _) = get_id_from_gallery(url);
         Ok(gallery::table
             .filter(gallery::gallery_id.eq(id))
             .get_result::<Gallery>(&self.pool.get()?)?)
