@@ -21,11 +21,4 @@ table! {
     }
 }
 
-table! {
-    users (user_id) {
-        user_id -> Integer,
-        warn -> SmallInt,
-    }
-}
-
-allow_tables_to_appear_in_same_query!(gallery, images, users,);
+allow_tables_to_appear_in_same_query!(gallery, images);

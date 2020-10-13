@@ -5,7 +5,6 @@ use anyhow::Result;
 use chrono::prelude::*;
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool};
-use diesel::result::Error as DieselError;
 use std::env;
 
 #[derive(Queryable, Insertable)]
@@ -29,13 +28,6 @@ pub struct Image {
     pub gallery_id: i32,
     pub number: i32,
     pub url: String,
-}
-
-#[derive(Queryable, Insertable)]
-#[table_name = "users"]
-pub struct User {
-    pub user_id: i32,
-    pub warn: i16,
 }
 
 pub struct DataBase {
@@ -78,29 +70,81 @@ impl DataBase {
         todo!()
     }
 
-    pub fn insert_gallery<S: Into<String>>(
+    pub fn insert_gallery(
         &self,
         info: &FullGalleryInfo,
-        telegraph: S,
+        telegraph: String,
         message_id: i32,
     ) -> Result<()> {
-        let (id, token) = get_id_from_gallery(&info.url);
+        let (gallery_id, token) = get_id_from_gallery(&info.url);
         let gallery = Gallery {
-            gallery_id: id,
-            token: token.to_owned(),
             title: info.title.to_owned(),
             tags: serde_json::to_string(&info.tags)?,
             publish_date: Utc::today().naive_utc(),
             score: 0.0,
-            message_id,
             upload_images: info.get_image_lists().len() as i16,
             poll_id: "".to_string(),
-            telegraph: telegraph.into(),
+            telegraph,
+            gallery_id,
+            token,
+            message_id,
         };
         diesel::insert_or_ignore_into(gallery::table)
             .values(&gallery)
             .execute(&self.pool.get()?)?;
         Ok(())
+    }
+
+    // TODO: 根据 grep.app 上的代码优化一下自己的代码
+    /// 根据标题更新画廊
+    pub fn update_gallery(
+        &self,
+        info: &FullGalleryInfo,
+        telegraph: String,
+        message_id: i32,
+    ) -> Result<()> {
+        let (gallery_id, token) = get_id_from_gallery(&info.url);
+        diesel::update(gallery::table)
+            .filter(gallery::title.eq(&info.title))
+            .set((
+                gallery::gallery_id.eq(gallery_id),
+                gallery::token.eq(token),
+                gallery::message_id.eq(message_id),
+                gallery::telegraph.eq(telegraph),
+                gallery::tags.eq(serde_json::to_string(&info.tags)?),
+                gallery::upload_images.eq(info.get_image_lists().len() as i16),
+            ))
+            .execute(&self.pool.get()?)?;
+        Ok(())
+    }
+
+    /// 根据消息 id 删除画廊
+    pub fn delete_gallery(&self, message_id: i32) -> Result<()> {
+        diesel::delete(gallery::table)
+            .filter(gallery::message_id.eq(message_id))
+            .execute(&self.pool.get()?)?;
+        Ok(())
+    }
+
+    /// 查询自指定日期以来分数大于指定分数的若干本本子
+    pub fn query_best(
+        &self,
+        min_score: f32,
+        from: NaiveDate,
+        to: NaiveDate,
+        cnt: i64,
+    ) -> Result<Vec<Gallery>> {
+        Ok(gallery::table
+            .filter(
+                gallery::score.ge(min_score).and(
+                    gallery::publish_date
+                        .ge(to)
+                        .and(gallery::publish_date.le(from)),
+                ),
+            )
+            .order_by(gallery::score.desc())
+            .limit(cnt)
+            .load::<Gallery>(&self.pool.get()?)?)
     }
 
     pub fn update_poll_id(&self, message_id: i32, poll_id: &str) -> Result<()> {
@@ -130,29 +174,5 @@ impl DataBase {
         Ok(gallery::table
             .filter(gallery::title.eq(title))
             .get_result::<Gallery>(&self.pool.get()?)?)
-    }
-
-    pub fn add_warn(&self, user_id: i32) -> Result<i16> {
-        let warn = users::table
-            .select(users::warn)
-            .filter(users::user_id.eq(user_id))
-            .first::<i16>(&self.pool.get()?);
-        match warn {
-            Err(DieselError::NotFound) => {
-                let t = User { user_id, warn: 1 };
-                diesel::insert_into(users::table)
-                    .values(&t)
-                    .execute(&self.pool.get()?)?;
-                Ok(1)
-            }
-            Ok(v) => {
-                diesel::update(users::table)
-                    .filter(users::user_id.eq(user_id))
-                    .set(users::warn.eq(v + 1))
-                    .execute(&self.pool.get()?)?;
-                Ok(v + 1)
-            }
-            Err(e) => Err(e)?,
-        }
     }
 }

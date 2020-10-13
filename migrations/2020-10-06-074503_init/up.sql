@@ -19,8 +19,3 @@ CREATE TABLE images (
     url TEXT NOT NULL,
     PRIMARY KEY (gallery_id, number)
 );
-
-CREATE TABLE users (
-    user_id INTEGER PRIMARY KEY NOT NULL,
-    warn INT2 NOT NULL
-);

@@ -4,6 +4,7 @@ use crate::{BOT, CONFIG, DB};
 use anyhow::Result;
 use telegraph_rs::{html_to_node, Page, Telegraph};
 use teloxide::prelude::*;
+use teloxide::types::ChatOrInlineMessage;
 use v_htmlescape::escape;
 
 pub struct ExLoli {
@@ -54,11 +55,15 @@ impl ExLoli {
         let gallery = gallery.into_full_info().await?;
 
         // 判断是否上传过并且不需要更新
-        if let Ok(g) = DB.query_gallery_by_title(&gallery.title) {
-            if g.upload_images as usize >= CONFIG.exhentai.max_img_cnt {
-                return Err(anyhow::anyhow!("AlreadyUpload"));
+        let old_gallery = match DB.query_gallery_by_title(&gallery.title) {
+            Ok(g) => {
+                if g.upload_images as usize >= CONFIG.exhentai.max_img_cnt {
+                    return Err(anyhow::anyhow!("AlreadyUpload"));
+                }
+                Some(g)
             }
-        }
+            _ => None,
+        };
 
         let img_cnt = gallery.get_image_lists().len();
         let img_urls = gallery.upload_images_to_telegraph().await?;
@@ -69,9 +74,38 @@ impl ExLoli {
             .await?;
         info!("文章地址: {}", page.url);
 
-        let message = self.publish_to_telegram(&gallery, &page.url).await?;
+        if let Some(g) = old_gallery {
+            let message = self
+                .edit_telegram(g.message_id, &gallery, &page.url)
+                .await?;
+            DB.update_gallery(&gallery, page.url, message.id)
+        } else {
+            let message = self.publish_to_telegram(&gallery, &page.url).await?;
+            DB.insert_gallery(&gallery, page.url, message.id)
+        }
+    }
 
-        DB.insert_gallery(&gallery, page.url, message.id)
+    /// 编辑旧消息
+    async fn edit_telegram<'a>(
+        &self,
+        message_id: i32,
+        gallery: &FullGalleryInfo<'a>,
+        article: &str,
+    ) -> Result<Message> {
+        info!("更新 Telegram 频道消息");
+        let message = ChatOrInlineMessage::Chat {
+            chat_id: CONFIG.telegram.channel_id.clone(),
+            message_id,
+        };
+        let tags = tags_to_string(&gallery.tags);
+        let text = format!(
+            "{0}\n<code>  预览</code>：<a href=\"{1}\">{2}</a>\n<code>原始地址</code>：<a href=\"{3}\">{3}</a>",
+            tags,
+            article,
+            escape(&gallery.title),
+            gallery.url,
+        );
+        Ok(BOT.edit_message_text(message, &text).send().await?)
     }
 
     /// 将画廊内容上传至 telegraph
