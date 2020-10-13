@@ -1,10 +1,13 @@
+use crate::database::Gallery;
 use crate::exhentai::*;
 use crate::utils::*;
 use crate::{BOT, CONFIG, DB};
 use anyhow::Result;
+use chrono::{Duration, Utc};
 use telegraph_rs::{html_to_node, Page, Telegraph};
 use teloxide::prelude::*;
 use teloxide::types::ChatOrInlineMessage;
+use teloxide::ApiErrorKind;
 use v_htmlescape::escape;
 
 pub struct ExLoli {
@@ -31,7 +34,22 @@ impl ExLoli {
 
         // 从后往前爬, 保持顺序
         for gallery in galleries.into_iter().rev() {
-            if DB.query_gallery_by_url(&gallery.url).is_ok() {
+            if let Ok(g) = DB.query_gallery_by_url(&gallery.url) {
+                // 五天以前的就不更新 tag 了
+                if g.publish_date + Duration::days(5) < Utc::today().naive_utc() {
+                    continue;
+                }
+                // 检测是否需要更新 tag
+                // TODO: 将 tags 塞到 BasicInfo 里
+                let info = gallery.into_full_info().await?;
+                let new_tags = serde_json::to_string(&info.tags)?;
+                debug!("{}\n====\n{}", g.tags, new_tags);
+                if new_tags != g.tags {
+                    info!("tag 有更新，同步中...");
+                    info!("画廊名称: {}", info.title);
+                    info!("画廊地址: {}", info.url);
+                    self.update_tags(g, &info).await?;
+                }
                 continue;
             }
             self.upload_gallery_to_telegram(gallery).await?;
@@ -57,10 +75,16 @@ impl ExLoli {
         // 判断是否上传过并且不需要更新
         let old_gallery = match DB.query_gallery_by_title(&gallery.title) {
             Ok(g) => {
+                // 上传量已经达到限制的，不做更新
                 if g.upload_images as usize >= CONFIG.exhentai.max_img_cnt {
                     return Err(anyhow::anyhow!("AlreadyUpload"));
                 }
-                Some(g)
+                // 七天以内上传过的，不重复发小抄袭
+                if g.publish_date + Duration::days(7) > Utc::today().naive_utc() {
+                    Some(g)
+                } else {
+                    None
+                }
             }
             _ => None,
         };
@@ -75,10 +99,7 @@ impl ExLoli {
         info!("文章地址: {}", page.url);
 
         if let Some(g) = old_gallery {
-            let message = self
-                .edit_telegram(g.message_id, &gallery, &page.url)
-                .await?;
-            DB.update_gallery(&gallery, page.url, message.id)
+            self.edit_telegram(g.message_id, &gallery, &page.url).await
         } else {
             let message = self.publish_to_telegram(&gallery, &page.url).await?;
             DB.insert_gallery(&gallery, page.url, message.id)
@@ -91,7 +112,7 @@ impl ExLoli {
         message_id: i32,
         gallery: &FullGalleryInfo<'a>,
         article: &str,
-    ) -> Result<Message> {
+    ) -> Result<()> {
         info!("更新 Telegram 频道消息");
         let message = ChatOrInlineMessage::Chat {
             chat_id: CONFIG.telegram.channel_id.clone(),
@@ -105,7 +126,17 @@ impl ExLoli {
             escape(&gallery.title),
             gallery.url,
         );
-        Ok(BOT.edit_message_text(message, &text).send().await?)
+        match BOT.edit_message_text(message, &text).send().await {
+            Err(RequestError::ApiError {
+                kind: ApiErrorKind::Known(e),
+                ..
+            }) => {
+                error!("{:?}", e);
+                DB.update_gallery(&gallery, article.to_owned(), message_id)
+            }
+            Ok(mes) => DB.update_gallery(&gallery, article.to_owned(), mes.id),
+            Err(e) => Err(e)?,
+        }
     }
 
     /// 将画廊内容上传至 telegraph
@@ -145,5 +176,11 @@ impl ExLoli {
             .send_message(CONFIG.telegram.channel_id.clone(), &text)
             .send()
             .await?)
+    }
+
+    async fn update_tags<'a>(&self, og: Gallery, ng: &FullGalleryInfo<'a>) -> Result<()> {
+        self.edit_telegram(og.message_id, &ng, &og.telegraph)
+            .await?;
+        Ok(())
     }
 }

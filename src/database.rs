@@ -103,9 +103,14 @@ impl DataBase {
         telegraph: String,
         message_id: i32,
     ) -> Result<()> {
+        debug!("更新画廊数据");
         let (gallery_id, token) = get_id_from_gallery(&info.url);
         diesel::update(gallery::table)
-            .filter(gallery::title.eq(&info.title))
+            .filter(
+                gallery::title
+                    .eq(&info.title)
+                    .or(gallery::gallery_id.eq(gallery_id)),
+            )
             .set((
                 gallery::gallery_id.eq(gallery_id),
                 gallery::token.eq(token),
