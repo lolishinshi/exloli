@@ -1547,9 +1547,9 @@ dependencies = [
 
 [[package]]
 name = "teloxide"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02e80ce85aa042a66a81e2262139cf3767d8fe2a046e907b870d58e380226182"
+checksum = "c98ba29fdc03ddd4bf47446f5326225a5379fdd3b422dd23b96695c6608fc51e"
 dependencies = [
  "async-trait",
  "bytes 0.5.6",
