@@ -25,6 +25,7 @@ enum RuaCommand {
     Delete,
     // 最低分数 最少几天前 最多几天前 多少本
     Best(f32, i64, i64, i64),
+    Full,
 }
 
 async fn send_pool(message: &UpdateWithCx<Message>) -> Result<()> {
@@ -84,6 +85,11 @@ async fn delete_gallery(message: &UpdateWithCx<Message>) -> Result<()> {
     send!(message.bot.delete_message(to_del.chat.id, to_del.id))?;
     send!(message.bot.delete_message(channel.id, *mes_id))?;
     DB.delete_gallery(*mes_id)?;
+    Ok(())
+}
+
+async fn update_gallery_to_full(message: &UpdateWithCx<Message>) -> Result<()> {
+    check_is_owner!(&message);
     Ok(())
 }
 
@@ -170,6 +176,7 @@ async fn message_handler(exloli: Arc<ExLoli>, message: UpdateWithCx<Message>) ->
             Best(min_score, from, to, cnt) => {
                 query_best(&message, min_score, from, to, cnt).await?
             }
+            Full => update_gallery_to_full(&message).await?,
         }
     }
     Ok(())

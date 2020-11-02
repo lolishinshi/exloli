@@ -7,6 +7,8 @@ use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool};
 use std::env;
 
+embed_migrations!("migrations");
+
 #[derive(Queryable, Insertable)]
 #[table_name = "gallery"]
 pub struct Gallery {
@@ -44,6 +46,12 @@ impl DataBase {
             .build(manager)
             .expect("连接池建立失败");
         Self { pool }
+    }
+
+    pub fn init_database(&self) -> Result<()> {
+        embedded_migrations::run(&self.pool.get()?)?;
+        embedded_migrations::run_with_output(&self.pool.get()?, &mut std::io::stdout())?;
+        Ok(())
     }
 
     pub fn insert_image(&self, image_url: &str, uploaded_url: &str) -> Result<()> {
