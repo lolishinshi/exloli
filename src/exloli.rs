@@ -35,8 +35,8 @@ impl ExLoli {
         // 从后往前爬, 保持顺序
         for gallery in galleries.into_iter().rev() {
             if let Ok(g) = DB.query_gallery_by_url(&gallery.url) {
-                // 五天以前的就不更新 tag 了
-                if g.publish_date + Duration::days(5) < Utc::today().naive_utc() {
+                // 三天以前的就不更新 tag 了
+                if g.publish_date + Duration::days(3) <= Utc::today().naive_utc() {
                     continue;
                 }
                 // 检测是否需要更新 tag
@@ -52,7 +52,10 @@ impl ExLoli {
                 }
                 continue;
             }
-            self.upload_gallery_to_telegram(gallery).await?;
+            self.upload_gallery_to_telegram(gallery)
+                .await
+                .log_on_error()
+                .await;
         }
 
         Ok(())

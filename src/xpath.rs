@@ -103,7 +103,7 @@ pub fn parse_html<S: AsRef<str>>(html: S) -> Result<Node, Error> {
     let parser = Parser::default_html();
     let document = parser
         .parse_string(html.as_ref())
-        .map_err(|_| format_err!("failed to parse html"))?;
+        .map_err(|e| format_err!("failed to parse html: {}", e))?;
     let context = Context::new(&document).map_err(|_| format_err!("failed to new context"))?;
     let root = document.get_root_element().expect("no root element");
     Ok(Node {
