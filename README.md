@@ -27,6 +27,8 @@ log_level = "INFO"
 threads_num = "4"
 # 每隔多少秒检查一次，默认半小时
 interval = 1800
+# 数据库储存位置
+database_url = "db.sqlite"
 
 [exhentai]
 # E 站用户名
@@ -58,19 +60,10 @@ author_url = "https://t.me/exlolicon"
 channel_id = "@exlolicon"
 # 机器人 token
 token = "TOKEN"
+# 机器人 ID
+bot_id = "@crypko_bot"
 # telegram 频道对应讨论组的 ID，暂时只能为数字
 group_id = -2147483647
-# bot 管理员
+# bot 管理员的 ID
 owner = "username"
-
-```
-
-## 参数
-
-```zsh
-# 备份数据库
-exloli dump > db.bak.json
-
-# 恢复数据库
-exloli load db.bak.json
 ```
