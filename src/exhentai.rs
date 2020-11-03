@@ -67,7 +67,10 @@ impl<'a> BasicGalleryInfo<'a> {
 
         // 标签
         let mut tags = vec![];
-        for ele in html.xpath_elem(r#"//div[@id="taglist"]//tr"#)? {
+        for ele in html
+            .xpath_elem(r#"//div[@id="taglist"]//tr"#)
+            .unwrap_or_default()
+        {
             let tag_set_name = ele.xpath_text(r#"./td[1]/text()"#)?[0]
                 .trim_matches(':')
                 .to_owned();
@@ -163,33 +166,39 @@ impl<'a> FullGalleryInfo<'a> {
             info!("第 {} / {} 张图片", now + 1, img_cnt);
         };
 
-        let mut f = vec![];
-        for url in img_pages.iter() {
-            f.push(async move {
-                update_progress();
-                // TODO: 此处不应返回 None，上传失败时应该整体重来
-                for _ in 0..5i32 {
-                    let result = self.upload_image(url).await;
-                    match result {
-                        Ok(v) => {
-                            DB.insert_image(url, &v).expect("插入图片失败");
-                            return Some(v);
-                        }
-                        Err(e) => {
-                            error!("获取图片地址失败：{}", e);
-                            delay_for(Duration::from_secs(10)).await;
-                        }
+        // TODO: 避免一次 clone？
+        let get_url = |url: String| async move {
+            update_progress();
+            for _ in 0..5i32 {
+                let result = self.upload_image(&url).await;
+                match result {
+                    Ok(v) => {
+                        DB.insert_image(&url, &v).expect("插入图片失败");
+                        return Ok(v);
+                    }
+                    Err(e) => {
+                        error!("获取图片地址失败：{}", e);
+                        delay_for(Duration::from_secs(10)).await;
                     }
                 }
-                None
-            });
+            }
+            Err(format_err!("无法获图片地址"))
+        };
+
+        // TODO: 能谁能
+        let mut f = vec![];
+        for url in img_pages.iter() {
+            f.push(get_url(url.to_owned()));
         }
 
-        let ret = futures::stream::iter(f)
-            .buffered(CONFIG.threads_num)
-            .filter_map(|x| async move { x })
-            .collect::<Vec<_>>()
-            .await;
+        // FIXME: 此处不 block 的话会得到一个奇怪的编译错误……
+        let ret = block_in_place(|| {
+            block_on(
+                futures::stream::iter(f.into_iter().map(Ok))
+                    .try_buffer_unordered(CONFIG.threads_num)
+                    .try_collect::<Vec<_>>(),
+            )
+        })?;
 
         Ok(ret)
     }
@@ -304,7 +313,7 @@ impl ExHentai {
             .client
             .get(&CONFIG.exhentai.search_url)
             .query(&CONFIG.exhentai.search_params)
-            .query(&[("page", &*page.to_string())]))?;
+            .query(&[("page", &page.to_string())]))?;
         debug!("状态码: {}", response.status());
         let text = response.text().await?;
         debug!("返回: {}", &text[..100.min(text.len())]);

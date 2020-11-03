@@ -4,6 +4,8 @@ extern crate log;
 extern crate diesel;
 #[macro_use]
 extern crate diesel_migrations;
+#[macro_use]
+extern crate anyhow;
 
 use crate::config::Config;
 use crate::database::DataBase;

@@ -58,13 +58,13 @@ pub async fn upload_gallery(
         chat_id: ChatId::Id(mes.chat.id),
         message_id: mes.id,
     };
-    let mut text = "上传完毕";
+    let mut text = "上传完毕".to_owned();
     if let Err(e) = exloli.upload_gallery_by_url(&url).await {
         error!("上传出错：{}", e);
         if &*e.to_string() == "AlreadyUpload" {
-            text = "该画廊已上传过";
+            text = "该画廊已上传过".to_owned();
         } else {
-            text = "上传失败，请稍后重试";
+            text = format!("上传失败：{}", e);
         }
     }
     send!(message.bot.edit_message_text(to_edit, text))?;

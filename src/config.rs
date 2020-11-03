@@ -60,9 +60,7 @@ impl Config {
     }
 
     pub async fn init_exhentai(&self) -> Result<crate::exhentai::ExHentai, Error> {
-        let exhentai = &self.exhentai;
-
-        if let Some(_) = &exhentai.cookie {
+        if self.exhentai.cookie.is_some() {
             crate::exhentai::ExHentai::from_cookie().await
         } else {
             crate::exhentai::ExHentai::new().await

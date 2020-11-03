@@ -137,7 +137,7 @@ impl ExLoli {
                 DB.update_gallery(&gallery, article.to_owned(), message_id)
             }
             Ok(mes) => DB.update_gallery(&gallery, article.to_owned(), mes.id),
-            Err(e) => Err(e)?,
+            Err(e) => Err(e.into()),
         }
     }
 

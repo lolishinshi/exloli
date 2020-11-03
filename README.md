@@ -24,7 +24,7 @@ config.toml 模板如下
 # 日志等级, 可选 INFO, DEBUG, ERROR. 默认 INFO
 log_level = "INFO"
 # 图片下载并发数. 默认 4
-threads_num = "4"
+threads_num = 4
 # 每隔多少秒检查一次，默认半小时
 interval = 1800
 # 数据库储存位置
@@ -41,7 +41,7 @@ cookie = "ipb_member_id=xx; ipb_pass_hash=xx; igneous=xx;"
 search_url = "https://exhentai.org"
 # 搜索参数
 search_params = [
-    ["f_cat", "704"],
+    ["f_cats", "704"],
     ["f_search", "female:lolicon language:Chinese"]
 ]
 # 上传前多少页的本子, 重复的会自动过滤
