@@ -66,6 +66,4 @@ token = "TOKEN"
 bot_id = "@crypko_bot"
 # telegram 频道对应讨论组的 ID，暂时只能为数字
 group_id = -2147483647
-# bot 管理员的 ID
-owner = "username"
 ```

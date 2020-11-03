@@ -26,7 +26,6 @@ macro_rules! unwrap {
 }
 
 pub trait MessageExt {
-    fn is_from_owner(&self) -> bool;
     fn is_from_group(&self) -> bool;
     fn get_command<T: BotCommand>(&self) -> Option<T>;
     fn from_username(&self) -> Option<&String>;
@@ -34,16 +33,7 @@ pub trait MessageExt {
 }
 
 impl MessageExt for Message {
-    /// 判断是否是由所有者发出的消息，其中包含了匿名 bot
-    fn is_from_owner(&self) -> bool {
-        self.from()
-            .map(|u| {
-                u.username.as_ref() == Some(&CONFIG.telegram.owner)
-                    || u.username == Some("GroupAnonymousBot".into())
-            })
-            .unwrap_or(false)
-    }
-
+    // 判断消息来源是否是指定群组
     fn is_from_group(&self) -> bool {
         match CONFIG.telegram.group_id {
             ChatId::Id(id) => self.chat.id == id,

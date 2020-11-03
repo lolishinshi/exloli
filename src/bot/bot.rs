@@ -9,12 +9,28 @@ use teloxide::utils::command::BotCommand;
 
 macro_rules! check_is_owner {
     ($e:expr) => {
-        if !$e.update.is_from_owner() {
+        if !check_is_channel_admin($e).await? {
             info!("权限检查失败");
             send!($e.delete_message())?;
             return Ok(());
         }
     };
+}
+
+// 检测是否是指定频道的管理员
+async fn check_is_channel_admin(message: &UpdateWithCx<Message>) -> Result<bool> {
+    // TODO: 缓存管理员名单
+    let channel_admins = send!(BOT.get_chat_administrators(CONFIG.telegram.channel_id.clone()))?;
+    Ok(message
+        .update
+        .from()
+        .map(|user| {
+            channel_admins
+                .iter()
+                .map(|admin| &admin.user == user)
+                .any(|x| x)
+        })
+        .unwrap_or(false))
 }
 
 #[derive(BotCommand, PartialEq, Debug)]
@@ -51,7 +67,7 @@ pub async fn upload_gallery(
     message: &UpdateWithCx<Message>,
     url: &str,
     exloli: &ExLoli,
-) -> ResponseResult<()> {
+) -> Result<()> {
     check_is_owner!(&message);
     let mes = send!(message.reply_to("收到命令，上传中……"))?;
     let to_edit = ChatOrInlineMessage::Chat {
@@ -71,6 +87,7 @@ pub async fn upload_gallery(
     Ok(())
 }
 
+// FIXME: 即使删除画廊也会在扫描时重新上传
 async fn delete_gallery(message: &UpdateWithCx<Message>) -> Result<()> {
     check_is_owner!(&message);
     let to_del = match message.update.reply_to_message() {
@@ -149,18 +166,8 @@ async fn message_handler(exloli: Arc<ExLoli>, message: UpdateWithCx<Message>) ->
 
     debug!("{:#?}", message.update);
 
-    // 如果消息来源不是指定群组，直接忽略
-    match CONFIG.telegram.group_id {
-        ChatId::Id(v) => {
-            if message.chat_id() != v {
-                return Ok(());
-            }
-        }
-        _ => unimplemented!("group_id 只能为数字"),
-    }
-
     // 如果是新本子上传的消息，则回复投票
-    if is_new_gallery(&message.update) {
+    if is_new_gallery(&message.update) && message.update.is_from_group() {
         send_pool(&message).await.log_on_error().await;
     }
 
