@@ -90,7 +90,7 @@ async fn delete_gallery(message: &UpdateWithCx<Message>) -> Result<()> {
 
 async fn update_gallery_to_full(message: &UpdateWithCx<Message>) -> Result<()> {
     check_is_owner!(&message);
-    Ok(())
+    todo!()
 }
 
 async fn query_best(

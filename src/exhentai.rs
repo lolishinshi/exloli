@@ -24,6 +24,12 @@ macro_rules! set_header {
     }};
 }
 
+macro_rules! send {
+    ($e:expr) => {
+        $e.send().await
+    };
+}
+
 lazy_static! {
     static ref HEADERS: HeaderMap = set_header! {
         ACCEPT => "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -55,7 +61,7 @@ impl<'a> BasicGalleryInfo<'a> {
     /// 获取画廊的完整信息
     pub async fn into_full_info(self) -> Result<FullGalleryInfo<'a>> {
         debug!("获取画廊信息: {}", self.url);
-        let response = self.client.get(&self.url).send().await?;
+        let response = send!(self.client.get(&self.url))?;
         debug!("状态码: {}", response.status());
         let mut html = parse_html(response.text().await?)?;
 
@@ -94,7 +100,7 @@ impl<'a> BasicGalleryInfo<'a> {
             debug!("下一页: {:?}", next_page);
             // TODO: 干掉此处的 block_on
             let text = block_in_place(|| {
-                block_on(async { self.client.get(&next_page[0]).send().await?.text().await })
+                block_on(async { send!(self.client.get(&next_page[0]))?.text().await })
             })?;
             html = parse_html(text)?;
             img_pages.extend(html.xpath_text(r#"//div[@class="gdtl"]/a/@href"#)?);
@@ -195,7 +201,7 @@ impl<'a> FullGalleryInfo<'a> {
             trace!("找到缓存!");
             return Ok(image.url);
         }
-        let response = self.client.get(url).send().await?;
+        let response = send!(self.client.get(url))?;
         trace!("状态码: {}", response.status());
 
         let url = parse_html(response.text().await?)?
@@ -247,7 +253,7 @@ impl ExHentai {
 
         info!("登录表站...");
         // 登录表站, 获得 cookie
-        let _response = client
+        let _response = send!(client
             .post("https://forums.e-hentai.org/index.php")
             .query(&[("act", "Login"), ("CODE", "01")])
             .form(&[
@@ -257,18 +263,13 @@ impl ExHentai {
                 ("UserName", &CONFIG.exhentai.username),
                 ("PassWord", &CONFIG.exhentai.password),
                 ("ipb_login_submit", "Login!"),
-            ])
-            .send()
-            .await?;
+            ]))?;
 
         info!("登录里站...");
         // 访问里站, 取得必要的 cookie
-        let _response = client.get("https://exhentai.org").send().await?;
+        let _response = send!(client.get("https://exhentai.org"))?;
         // 获得过滤设置相关的 cookie ?
-        let _response = client
-            .get("https://exhentai.org/uconfig.php")
-            .send()
-            .await?;
+        let _response = send!(client.get("https://exhentai.org/uconfig.php"))?;
         info!("登录成功!");
 
         Ok(Self { client })
@@ -290,10 +291,7 @@ impl ExHentai {
         }
         let client = client.build()?;
 
-        let _response = client
-            .get("https://exhentai.org/uconfig.php")
-            .send()
-            .await?;
+        let _response = send!(client.get("https://exhentai.org/uconfig.php"))?;
         info!("登录成功!");
 
         Ok(Self { client })
@@ -302,13 +300,11 @@ impl ExHentai {
     /// 搜索指定关键字
     pub async fn search<'a>(&'a self, page: i32) -> Result<Vec<BasicGalleryInfo<'a>>> {
         debug!("搜索第 {} 页", page);
-        let response = self
+        let response = send!(self
             .client
             .get(&CONFIG.exhentai.search_url)
             .query(&CONFIG.exhentai.search_params)
-            .query(&[("page", &page.to_string())])
-            .send()
-            .await?;
+            .query(&[("page", &*page.to_string())]))?;
         debug!("状态码: {}", response.status());
         let text = response.text().await?;
         debug!("返回: {}", &text[..100.min(text.len())]);
@@ -355,7 +351,7 @@ impl ExHentai {
 
     pub async fn get_gallery_by_url<'a>(&'a self, url: &str) -> Result<BasicGalleryInfo<'a>> {
         info!("获取本子信息: {}", url);
-        let response = self.client.get(url).send().await?;
+        let response = send!(self.client.get(url))?;
         let html = parse_html(response.text().await?)?;
         let title = html.xpath_text(r#"//h1[@id="gn"]/text()"#)?.swap_remove(0);
         Ok(BasicGalleryInfo {

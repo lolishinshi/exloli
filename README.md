@@ -38,7 +38,7 @@ password = "password"
 # 可选, 使用 cookie 登录
 cookie = "ipb_member_id=xx; ipb_pass_hash=xx; igneous=xx;"
 # 搜索 URL
-search_url = "https://exhentai.org/?f_cats=704"
+search_url = "https://exhentai.org"
 # 搜索参数
 search_params = [
     ["f_cat", "704"],
