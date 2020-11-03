@@ -20,7 +20,7 @@ pub struct ExHentai {
     pub password: String,
     pub cookie: Option<String>,
     pub keyword: String,
-    pub search_watched: bool,
+    pub search_url: String,
     pub max_pages: i32,
     pub max_img_cnt: usize,
     pub proxy: Option<String>,
@@ -63,12 +63,12 @@ impl Config {
         let exhentai = &self.exhentai;
 
         if let Some(cookie) = &exhentai.cookie {
-            crate::exhentai::ExHentai::from_cookie(cookie, exhentai.search_watched).await
+            crate::exhentai::ExHentai::from_cookie(cookie, &exhentai.search_url).await
         } else {
             crate::exhentai::ExHentai::new(
                 &exhentai.username,
                 &exhentai.password,
-                exhentai.search_watched,
+                &exhentai.search_url,
             )
             .await
         }

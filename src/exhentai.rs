@@ -221,12 +221,12 @@ impl<'a> FullGalleryInfo<'a> {
 #[derive(Debug)]
 pub struct ExHentai {
     client: Client,
-    search_page: String,
+    search_url: String,
 }
 
 impl ExHentai {
     /// 登录 E-Hentai (能够访问 ExHentai 的前置条件
-    pub async fn new(username: &str, password: &str, search_watched: bool) -> Result<Self> {
+    pub async fn new(username: &str, password: &str, search_url: &str) -> Result<Self> {
         // 此处手动设置重定向, 因为 reqwest 的默认重定向处理策略会把相同 URL 直接判定为无限循环
         // 然而其实 COOKIE 变了, 所以不会无限循环
         let custom = Policy::custom(|attempt| {
@@ -274,16 +274,12 @@ impl ExHentai {
 
         Ok(Self {
             client,
-            search_page: if search_watched {
-                "https://exhentai.org/watched".to_owned()
-            } else {
-                "https://exhentai.org".to_owned()
-            },
+            search_url: search_url.to_owned(),
         })
     }
 
     /// 直接通过 cookie 登录
-    pub async fn from_cookie(cookie: &str, search_watched: bool) -> Result<Self> {
+    pub async fn from_cookie(cookie: &str, search_url: &str) -> Result<Self> {
         let mut headers = HEADERS.clone();
         headers.insert(header::COOKIE, HeaderValue::from_str(cookie)?);
 
@@ -303,11 +299,7 @@ impl ExHentai {
 
         Ok(Self {
             client,
-            search_page: if search_watched {
-                "https://exhentai.org/watched".to_owned()
-            } else {
-                "https://exhentai.org".to_owned()
-            },
+            search_url: search_url.to_owned(),
         })
     }
 
@@ -320,7 +312,7 @@ impl ExHentai {
         debug!("搜索 {} - {}", keyword, page);
         let response = self
             .client
-            .get(&self.search_page)
+            .get(&self.search_url)
             .query(&[("f_search", keyword), ("page", &page.to_string())])
             .send()
             .await?;

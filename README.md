@@ -39,9 +39,8 @@ password = "password"
 cookie = "ipb_member_id=xx; ipb_pass_hash=xx; igneous=xx;"
 # 搜索关键词
 keyword = "female:lolicon language:Chinese"
-# 是否在 Watched 页面搜索 (默认在首页搜索
-# Watched 页面的搜索定制性更高 (当然前提是你定制了
-search_watched = false
+# 搜索 URL，可以在此填一些其他参数
+search_url = "https://exhentai.org/?f_cats=704"
 # 上传前多少页的本子, 重复的会自动过滤
 max_pages = 2
 # 最大展示的图片数量
