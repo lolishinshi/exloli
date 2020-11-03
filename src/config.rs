@@ -19,8 +19,8 @@ pub struct ExHentai {
     pub username: String,
     pub password: String,
     pub cookie: Option<String>,
-    pub keyword: String,
     pub search_url: String,
+    pub search_params: Vec<(String, String)>,
     pub max_pages: i32,
     pub max_img_cnt: usize,
     pub proxy: Option<String>,
@@ -62,15 +62,10 @@ impl Config {
     pub async fn init_exhentai(&self) -> Result<crate::exhentai::ExHentai, Error> {
         let exhentai = &self.exhentai;
 
-        if let Some(cookie) = &exhentai.cookie {
-            crate::exhentai::ExHentai::from_cookie(cookie, &exhentai.search_url).await
+        if let Some(_) = &exhentai.cookie {
+            crate::exhentai::ExHentai::from_cookie().await
         } else {
-            crate::exhentai::ExHentai::new(
-                &exhentai.username,
-                &exhentai.password,
-                &exhentai.search_url,
-            )
-            .await
+            crate::exhentai::ExHentai::new().await
         }
     }
 }

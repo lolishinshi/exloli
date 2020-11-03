@@ -38,6 +38,3 @@ diesel = { version = "1.4.5", features = ["sqlite", "r2d2", "chrono"] }
 diesel_migrations = { version = "1.4.0", features = ["sqlite"] }
 dotenv = "0.15.0"
 chrono = "0.4.19"
-
-[profile.release]
-lto = true

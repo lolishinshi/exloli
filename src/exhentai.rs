@@ -221,12 +221,11 @@ impl<'a> FullGalleryInfo<'a> {
 #[derive(Debug)]
 pub struct ExHentai {
     client: Client,
-    search_url: String,
 }
 
 impl ExHentai {
     /// 登录 E-Hentai (能够访问 ExHentai 的前置条件
-    pub async fn new(username: &str, password: &str, search_url: &str) -> Result<Self> {
+    pub async fn new() -> Result<Self> {
         // 此处手动设置重定向, 因为 reqwest 的默认重定向处理策略会把相同 URL 直接判定为无限循环
         // 然而其实 COOKIE 变了, 所以不会无限循环
         let custom = Policy::custom(|attempt| {
@@ -255,8 +254,8 @@ impl ExHentai {
                 ("CookieDate", "1"),
                 ("b", "d"),
                 ("bt", "1-6"),
-                ("UserName", username),
-                ("PassWord", password),
+                ("UserName", &CONFIG.exhentai.username),
+                ("PassWord", &CONFIG.exhentai.password),
                 ("ipb_login_submit", "Login!"),
             ])
             .send()
@@ -272,16 +271,16 @@ impl ExHentai {
             .await?;
         info!("登录成功!");
 
-        Ok(Self {
-            client,
-            search_url: search_url.to_owned(),
-        })
+        Ok(Self { client })
     }
 
     /// 直接通过 cookie 登录
-    pub async fn from_cookie(cookie: &str, search_url: &str) -> Result<Self> {
+    pub async fn from_cookie() -> Result<Self> {
         let mut headers = HEADERS.clone();
-        headers.insert(header::COOKIE, HeaderValue::from_str(cookie)?);
+        headers.insert(
+            header::COOKIE,
+            HeaderValue::from_str(CONFIG.exhentai.cookie.as_ref().unwrap())?,
+        );
 
         let mut client = Client::builder()
             .cookie_store(true)
@@ -297,23 +296,17 @@ impl ExHentai {
             .await?;
         info!("登录成功!");
 
-        Ok(Self {
-            client,
-            search_url: search_url.to_owned(),
-        })
+        Ok(Self { client })
     }
 
     /// 搜索指定关键字
-    pub async fn search<'a>(
-        &'a self,
-        keyword: &str,
-        page: i32,
-    ) -> Result<Vec<BasicGalleryInfo<'a>>> {
-        debug!("搜索 {} - {}", keyword, page);
+    pub async fn search<'a>(&'a self, page: i32) -> Result<Vec<BasicGalleryInfo<'a>>> {
+        debug!("搜索第 {} 页", page);
         let response = self
             .client
-            .get(&self.search_url)
-            .query(&[("f_search", keyword), ("page", &page.to_string())])
+            .get(&CONFIG.exhentai.search_url)
+            .query(&CONFIG.exhentai.search_params)
+            .query(&[("page", &page.to_string())])
             .send()
             .await?;
         debug!("状态码: {}", response.status());
@@ -347,15 +340,11 @@ impl ExHentai {
         Ok(ret)
     }
 
-    pub async fn search_n_pages<'a>(
-        &'a self,
-        keyword: &str,
-        n: i32,
-    ) -> Result<Vec<BasicGalleryInfo<'a>>> {
+    pub async fn search_n_pages<'a>(&'a self, n: i32) -> Result<Vec<BasicGalleryInfo<'a>>> {
         info!("搜索前 {} 页本子", n);
         let mut result = vec![];
         for page in 0..n {
-            match self.search(keyword, page).await {
+            match self.search(page).await {
                 Ok(v) => result.extend(v),
                 Err(e) => error!("{}", e),
             }

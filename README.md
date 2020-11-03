@@ -37,10 +37,13 @@ username = "username"
 password = "password"
 # 可选, 使用 cookie 登录
 cookie = "ipb_member_id=xx; ipb_pass_hash=xx; igneous=xx;"
-# 搜索关键词
-keyword = "female:lolicon language:Chinese"
-# 搜索 URL，可以在此填一些其他参数
+# 搜索 URL
 search_url = "https://exhentai.org/?f_cats=704"
+# 搜索参数
+search_params = [
+    ["f_cat", "704"],
+    ["f_search", "female:lolicon language:Chinese"]
+]
 # 上传前多少页的本子, 重复的会自动过滤
 max_pages = 2
 # 最大展示的图片数量

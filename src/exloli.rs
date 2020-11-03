@@ -28,9 +28,8 @@ impl ExLoli {
     /// 根据配置文件自动扫描并上传本子
     pub async fn scan_and_upload(&self) -> Result<()> {
         // 筛选最新本子
-        let keyword = &CONFIG.exhentai.keyword;
         let page_limit = CONFIG.exhentai.max_pages;
-        let galleries = self.exhentai.search_n_pages(keyword, page_limit).await?;
+        let galleries = self.exhentai.search_n_pages(page_limit).await?;
 
         // 从后往前爬, 保持顺序
         for gallery in galleries.into_iter().rev() {
