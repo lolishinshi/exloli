@@ -65,6 +65,13 @@ impl<'a> BasicGalleryInfo<'a> {
         debug!("状态码: {}", response.status());
         let mut html = parse_html(response.text().await?)?;
 
+        // 英文标题和日文标题
+        let title = html.xpath_text(r#"//h1[@id="gn"]/text()"#)?.swap_remove(0);
+        let title_jp = html
+            .xpath_text(r#"//h1[@id="gj"]/text()"#)
+            .map(|mut n| n.swap_remove(0))
+            .ok();
+
         // 标签
         let mut tags = vec![];
         for ele in html
@@ -111,9 +118,10 @@ impl<'a> BasicGalleryInfo<'a> {
 
         Ok(FullGalleryInfo {
             client: self.client,
-            title: self.title.clone(),
             url: self.url.clone(),
             limit: self.limit,
+            title,
+            title_jp,
             rating,
             fav_cnt,
             img_pages,
@@ -128,6 +136,8 @@ pub struct FullGalleryInfo<'a> {
     client: &'a Client,
     /// 画廊标题
     pub title: String,
+    /// 画廊日文标题
+    pub title_jp: Option<String>,
     /// 画廊地址
     pub url: String,
     /// 评分

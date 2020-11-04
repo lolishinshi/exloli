@@ -94,9 +94,11 @@ impl ExLoli {
         let img_cnt = gallery.get_image_lists().len();
         let img_urls = gallery.upload_images_to_telegraph().await?;
 
+        // 上传到 telegraph
         let overflow = gallery.img_pages.len() != img_cnt;
+        let title = gallery.title_jp.as_ref().unwrap_or(&gallery.title);
         let page = self
-            .publish_to_telegraph(&gallery.title, &img_urls, overflow)
+            .publish_to_telegraph(title, &img_urls, overflow)
             .await?;
         info!("文章地址: {}", page.url);
 
@@ -120,14 +122,7 @@ impl ExLoli {
             chat_id: CONFIG.telegram.channel_id.clone(),
             message_id,
         };
-        let tags = tags_to_string(&gallery.tags);
-        let text = format!(
-            "{0}\n<code>  预览</code>：<a href=\"{1}\">{2}</a>\n<code>原始地址</code>：<a href=\"{3}\">{3}</a>",
-            tags,
-            article,
-            escape(&gallery.title),
-            gallery.url,
-        );
+        let text = Self::get_message_string(gallery, article);
         match BOT.edit_message_text(message, &text).send().await {
             Err(RequestError::ApiError {
                 kind: ApiErrorKind::Known(e),
@@ -166,14 +161,7 @@ impl ExLoli {
         article: &str,
     ) -> Result<Message> {
         info!("发布到 Telegram 频道");
-        let tags = tags_to_string(&gallery.tags);
-        let text = format!(
-            "{0}\n<code>  预览</code>：<a href=\"{1}\">{2}</a>\n<code>原始地址</code>：<a href=\"{3}\">{3}</a>",
-            tags,
-            article,
-            escape(&gallery.title),
-            gallery.url,
-        );
+        let text = Self::get_message_string(gallery, article);
         Ok(BOT
             .send_message(CONFIG.telegram.channel_id.clone(), &text)
             .send()
@@ -184,5 +172,26 @@ impl ExLoli {
         self.edit_telegram(og.message_id, &ng, &og.telegraph)
             .await?;
         Ok(())
+    }
+
+    /// 生成用于发送消息的字符串，默认使用日文标题，在有日文标题的情况下会在消息中附上英文标题
+    fn get_message_string<'a>(gallery: &FullGalleryInfo<'a>, article: &str) -> String {
+        let mut tags = tags_to_string(&gallery.tags);
+        tags.push_str(&format!(
+            "\n<code>  预览</code>：<a href=\"{}\">{}</a>",
+            article,
+            escape(&gallery.title_jp.as_ref().unwrap_or(&gallery.title))
+        ));
+        tags.push_str(&format!(
+            "\n<code>原始地址</code>：<a href=\"{0}\">{0}</a>",
+            gallery.url
+        ));
+        if gallery.title_jp.is_some() {
+            tags.push_str(&format!(
+                "\n<code>英文标题</code>：{}",
+                escape(&gallery.title)
+            ));
+        }
+        tags
     }
 }
