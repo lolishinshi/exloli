@@ -185,20 +185,16 @@ impl<'a> FullGalleryInfo<'a> {
             Err(format_err!("无法获图片地址"))
         };
 
-        // TODO: 能谁能
+        // TODO: 能不能 iter(img_pages)
         let mut f = vec![];
         for url in img_pages.iter() {
             f.push(get_url(url.to_owned()));
         }
 
-        // FIXME: 此处不 block 的话会得到一个奇怪的编译错误……
-        let ret = block_in_place(|| {
-            block_on(
-                futures::stream::iter(f.into_iter().map(Ok))
-                    .try_buffer_unordered(CONFIG.threads_num)
-                    .try_collect::<Vec<_>>(),
-            )
-        })?;
+        let ret = futures::stream::iter(f)
+            .buffered(CONFIG.threads_num)
+            .try_collect::<Vec<_>>()
+            .await?;
 
         Ok(ret)
     }
