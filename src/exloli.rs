@@ -180,18 +180,12 @@ impl ExLoli {
         tags.push_str(&format!(
             "\n<code>  预览</code>：<a href=\"{}\">{}</a>",
             article,
-            escape(&gallery.title_jp.as_ref().unwrap_or(&gallery.title))
+            escape(&gallery.title)
         ));
         tags.push_str(&format!(
             "\n<code>原始地址</code>：<a href=\"{0}\">{0}</a>",
             gallery.url
         ));
-        if gallery.title_jp.is_some() {
-            tags.push_str(&format!(
-                "\n<code>英文标题</code>：{}",
-                escape(&gallery.title)
-            ));
-        }
         tags
     }
 }
