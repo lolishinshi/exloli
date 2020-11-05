@@ -131,29 +131,22 @@ impl DataBase {
         Ok(())
     }
 
-    /// 根据消息 id 删除画廊
-    pub fn delete_gallery(&self, message_id: i32) -> Result<()> {
-        diesel::delete(gallery::table)
+    /// 根据消息 id 删除画廊，并不会实际删除，否则又会在定时更新时被上传
+    pub fn delete_gallery_by_message_id(&self, message_id: i32) -> Result<()> {
+        diesel::update(gallery::table)
             .filter(gallery::message_id.eq(message_id))
+            .set(gallery::score.eq(-1.0))
             .execute(&self.pool.get()?)?;
         Ok(())
     }
 
     /// 查询自指定日期以来分数大于指定分数的若干本本子
-    pub fn query_best(
-        &self,
-        min_score: f32,
-        from: NaiveDate,
-        to: NaiveDate,
-        cnt: i64,
-    ) -> Result<Vec<Gallery>> {
+    pub fn query_best(&self, from: NaiveDate, to: NaiveDate, cnt: i64) -> Result<Vec<Gallery>> {
         Ok(gallery::table
             .filter(
-                gallery::score.ge(min_score).and(
-                    gallery::publish_date
-                        .ge(to)
-                        .and(gallery::publish_date.le(from)),
-                ),
+                gallery::publish_date
+                    .ge(to)
+                    .and(gallery::publish_date.le(from)),
             )
             .order_by(gallery::score.desc())
             .limit(cnt)
@@ -187,5 +180,17 @@ impl DataBase {
         Ok(gallery::table
             .filter(gallery::title.eq(title))
             .get_result::<Gallery>(&self.pool.get()?)?)
+    }
+
+    pub fn query_gallery_by_message_id(&self, message_id: i32) -> Result<Gallery> {
+        Ok(gallery::table
+            .filter(gallery::message_id.eq(message_id))
+            .get_result::<Gallery>(&self.pool.get()?)?)
+    }
+}
+
+impl Gallery {
+    pub fn get_url(&self) -> String {
+        format!("https://exhentai.org/g/{}/{}", self.gallery_id, self.token)
     }
 }

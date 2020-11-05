@@ -94,6 +94,7 @@ async fn run() -> Result<(), Error> {
 
     loop {
         if !debug {
+            info!("定时更新开始");
             let result = exloli.scan_and_upload().await;
             if let Err(e) = result {
                 error!("定时更新出错：{}", e);

@@ -33,6 +33,7 @@ impl ExLoli {
 
         // 从后往前爬, 保持顺序
         for gallery in galleries.into_iter().rev() {
+            info!("检测中：{}", gallery.url);
             if let Ok(g) = DB.query_gallery_by_url(&gallery.url) {
                 // 三天以前的就不更新 tag 了
                 if g.publish_date + Duration::days(3) <= Utc::today().naive_utc() {
@@ -42,7 +43,6 @@ impl ExLoli {
                 // TODO: 将 tags 塞到 BasicInfo 里
                 let info = gallery.into_full_info().await?;
                 let new_tags = serde_json::to_string(&info.tags)?;
-                debug!("{}\n====\n{}", g.tags, new_tags);
                 if new_tags != g.tags {
                     info!("tag 有更新，同步中...");
                     info!("画廊名称: {}", info.title);
@@ -69,8 +69,7 @@ impl ExLoli {
 
     /// 将画廊上传到 telegram
     async fn upload_gallery_to_telegram<'a>(&'a self, gallery: BasicGalleryInfo<'a>) -> Result<()> {
-        info!("画廊名称: {}", gallery.title);
-        info!("画廊地址: {}", gallery.url);
+        info!("上传中，画廊名称: {}", gallery.title);
 
         let gallery = gallery.into_full_info().await?;
 
@@ -78,10 +77,10 @@ impl ExLoli {
         let old_gallery = match DB.query_gallery_by_title(&gallery.title) {
             Ok(g) => {
                 // 上传量已经达到限制的，不做更新
-                if g.upload_images as usize >= CONFIG.exhentai.max_img_cnt {
+                if g.upload_images as usize >= CONFIG.exhentai.max_img_cnt && gallery.limit {
                     return Err(anyhow::anyhow!("AlreadyUpload"));
                 }
-                // 七天以内上传过的，不重复发小抄袭
+                // 七天以内上传过的，不重复发，在原消息的基础上更新
                 if g.publish_date + Duration::days(7) > Utc::today().naive_utc() {
                     Some(g)
                 } else {

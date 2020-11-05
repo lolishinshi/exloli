@@ -39,12 +39,14 @@ enum RuaCommand {
     Upload(String),
     Ping,
     Delete,
-    // 最低分数 最少几天前 最多几天前 多少本
-    Best(f32, i64, i64, i64),
+    // 最少几天前 最多几天前 多少本
+    Best(i64, i64, i64),
     Full,
 }
 
-async fn send_pool(message: &UpdateWithCx<Message>) -> Result<()> {
+type Update = UpdateWithCx<Message>;
+
+async fn send_pool(message: &Update) -> Result<()> {
     info!("频道消息更新，发送投票");
     let options = vec![
         "我瞎了".into(),
@@ -63,32 +65,19 @@ async fn send_pool(message: &UpdateWithCx<Message>) -> Result<()> {
     DB.update_poll_id(message_id, &poll_id)
 }
 
-pub async fn upload_gallery(
-    message: &UpdateWithCx<Message>,
-    url: &str,
-    exloli: &ExLoli,
-) -> Result<()> {
+pub async fn upload_gallery(message: &Update, url: &str, exloli: &ExLoli) -> Result<()> {
     check_is_owner!(&message);
-    let mes = send!(message.reply_to("收到命令，上传中……"))?;
-    let to_edit = ChatOrInlineMessage::Chat {
-        chat_id: ChatId::Id(mes.chat.id),
-        message_id: mes.id,
-    };
+    let reply_message = send!(message.reply_to("收到命令，上传中……"))?.to_chat_or_inline_message();
     let mut text = "上传完毕".to_owned();
     if let Err(e) = exloli.upload_gallery_by_url(&url).await {
         error!("上传出错：{}", e);
-        if &*e.to_string() == "AlreadyUpload" {
-            text = "该画廊已上传过".to_owned();
-        } else {
-            text = format!("上传失败：{}", e);
-        }
+        text = format!("上传失败：{}", e);
     }
-    send!(message.bot.edit_message_text(to_edit, text))?;
+    send!(message.bot.edit_message_text(reply_message, text))?;
     Ok(())
 }
 
-// FIXME: 即使删除画廊也会在扫描时重新上传
-async fn delete_gallery(message: &UpdateWithCx<Message>) -> Result<()> {
+async fn delete_gallery(message: &Update) -> Result<()> {
     check_is_owner!(&message);
     let to_del = match message.update.reply_to_message() {
         Some(v) => v,
@@ -101,34 +90,43 @@ async fn delete_gallery(message: &UpdateWithCx<Message>) -> Result<()> {
     let mes_id = unwrap!(to_del.forward_from_message_id());
     send!(message.bot.delete_message(to_del.chat.id, to_del.id))?;
     send!(message.bot.delete_message(channel.id, *mes_id))?;
-    DB.delete_gallery(*mes_id)?;
+    DB.delete_gallery_by_message_id(*mes_id)?;
     Ok(())
 }
 
-async fn update_gallery_to_full(message: &UpdateWithCx<Message>) -> Result<()> {
+async fn update_gallery_to_full(message: &Update, exloli: &ExLoli) -> Result<()> {
     check_is_owner!(&message);
-    todo!()
+    let reply_message =
+        send!(message.reply_to("收到命令，将更新该画廊的完整版本……"))?.to_chat_or_inline_message();
+
+    let url = match message.update.reply_to_gallery() {
+        Some(v) => v.get_url(),
+        None => {
+            send!(message.reply_to("请回复需要更新的画廊"))?;
+            return Ok(());
+        }
+    };
+
+    let mut text = "更新完毕".to_owned();
+    if let Err(e) = exloli.upload_gallery_by_url(&url).await {
+        error!("上传出错：{}", e);
+        text = format!("更新失败：{}", e);
+    }
+    send!(message.bot.edit_message_text(reply_message, text))?;
+    Ok(())
 }
 
-async fn query_best(
-    message: &UpdateWithCx<Message>,
-    min_score: f32,
-    from: i64,
-    to: i64,
-    cnt: i64,
-) -> Result<()> {
+async fn query_best(message: &Update, from: i64, to: i64, cnt: i64) -> Result<()> {
     if cnt >= 20 {
         send!(message.reply_to("最多展示前 20 本"))?;
         return Ok(());
     }
-    let from_d = Utc::today().naive_utc() - Duration::days(from);
-    let to_d = Utc::today().naive_utc() - Duration::days(to);
-    // TODO: 不需要获取整个 gallery
-    let galleries = DB.query_best(min_score, from_d, to_d, cnt)?;
-    let mut text = format!(
-        "最近 {} - {} 天评分在 {:.2} 以上的 {} 本本子：\n",
-        from, to, min_score, cnt
+    let (from_d, to_d) = (
+        Utc::today().naive_utc() - Duration::days(from),
+        Utc::today().naive_utc() - Duration::days(to),
     );
+    let galleries = DB.query_best(from_d, to_d, cnt)?;
+    let mut text = format!("最近 {} - {} 天评分最高的 {} 本本子：\n", from, to, cnt);
     text.push_str(
         &galleries
             .iter()
@@ -161,10 +159,10 @@ fn is_new_gallery(message: &Message) -> bool {
         .unwrap_or(false)
 }
 
-async fn message_handler(exloli: Arc<ExLoli>, message: UpdateWithCx<Message>) -> Result<()> {
+async fn message_handler(exloli: Arc<ExLoli>, message: Update) -> Result<()> {
     use RuaCommand::*;
 
-    debug!("{:#?}", message.update);
+    trace!("{:#?}", message.update);
 
     // 如果是新本子上传的消息，则回复投票
     if is_new_gallery(&message.update) && message.update.is_from_group() {
@@ -180,10 +178,8 @@ async fn message_handler(exloli: Arc<ExLoli>, message: UpdateWithCx<Message>) ->
             Ping => {
                 send!(message.reply_to("pong"))?;
             }
-            Best(min_score, from, to, cnt) => {
-                query_best(&message, min_score, from, to, cnt).await?
-            }
-            Full => update_gallery_to_full(&message).await?,
+            Best(from, to, cnt) => query_best(&message, from, to, cnt).await?,
+            Full => update_gallery_to_full(&message, &exloli).await?,
         }
     }
     Ok(())
