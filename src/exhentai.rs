@@ -285,6 +285,7 @@ impl ExHentai {
         let _response = send!(client.get("https://exhentai.org"))?;
         // 获得过滤设置相关的 cookie ?
         let _response = send!(client.get("https://exhentai.org/uconfig.php"))?;
+        let _response = send!(client.get("https://exhentai.org/mytags"))?;
         info!("登录成功!");
 
         Ok(Self { client })
@@ -307,6 +308,7 @@ impl ExHentai {
         let client = client.build()?;
 
         let _response = send!(client.get("https://exhentai.org/uconfig.php"))?;
+        let _response = send!(client.get("https://exhentai.org/mytags"))?;
         info!("登录成功!");
 
         Ok(Self { client })
