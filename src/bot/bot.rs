@@ -19,6 +19,14 @@ macro_rules! check_is_owner {
 
 // 检测是否是指定频道的管理员
 async fn check_is_channel_admin(message: &UpdateWithCx<Message>) -> Result<bool> {
+    // 先检测是否为匿名管理员
+    let from_user = message.update.from();
+    if from_user
+        .map(|u| u.username == Some("GroupAnonymousBot".into()))
+        .unwrap_or(false)
+    {
+        return Ok(true);
+    }
     // TODO: 缓存管理员名单
     let channel_admins = send!(BOT.get_chat_administrators(CONFIG.telegram.channel_id.clone()))?;
     Ok(message
