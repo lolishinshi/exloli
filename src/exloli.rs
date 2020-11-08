@@ -3,7 +3,7 @@ use crate::exhentai::*;
 use crate::utils::*;
 use crate::{BOT, CONFIG, DB};
 use anyhow::Result;
-use chrono::{Duration, Utc};
+use chrono::{Duration, Timelike, Utc};
 use telegraph_rs::{html_to_node, Page, Telegraph};
 use teloxide::prelude::*;
 use teloxide::types::ChatOrInlineMessage;
@@ -35,10 +35,17 @@ impl ExLoli {
         for gallery in galleries.into_iter().rev() {
             info!("检测中：{}", gallery.url);
             if let Ok(g) = DB.query_gallery_by_url(&gallery.url) {
-                // 三天以前的就不更新 tag 了
-                if g.publish_date + Duration::days(3) <= Utc::today().naive_utc() {
+                let now = Utc::now();
+                let duration = Utc::today().naive_utc() - g.publish_date;
+                // 7 天前发的本子不更新
+                if duration.num_days() > 7 {
                     continue;
                 }
+                // 两天前的本子，逢 4 小时更新
+                if duration.num_days() > 2 && now.hour() % 4 != 0 {
+                    continue;
+                }
+
                 // 检测是否需要更新 tag
                 // TODO: 将 tags 塞到 BasicInfo 里
                 let info = gallery.into_full_info().await?;
