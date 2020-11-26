@@ -48,7 +48,7 @@ enum RuaCommand {
     Ping,
     Delete,
     // 最少几天前 最多几天前 多少本
-    Best(i64, i64, i64),
+    Best(u16, u16, u8),
     Full,
 }
 
@@ -125,7 +125,7 @@ async fn update_gallery_to_full(message: &Update, exloli: &ExLoli) -> Result<()>
 }
 
 async fn query_best(message: &Update, from: i64, to: i64, cnt: i64) -> Result<()> {
-    if cnt >= 20 {
+    if cnt > 20 {
         send!(message.reply_to("最多展示前 20 本"))?;
         return Ok(());
     }
@@ -186,7 +186,7 @@ async fn message_handler(exloli: Arc<ExLoli>, message: Update) -> Result<()> {
             Ping => {
                 send!(message.reply_to("pong"))?;
             }
-            Best(from, to, cnt) => query_best(&message, from, to, cnt).await?,
+            Best(from, to, cnt) => query_best(&message, from as i64, to as i64, cnt as i64).await?,
             Full => update_gallery_to_full(&message, &exloli).await?,
         }
     }

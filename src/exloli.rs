@@ -89,6 +89,7 @@ impl ExLoli {
                 }
                 // 七天以内上传过的，不重复发，在原消息的基础上更新
                 if g.publish_date + Duration::days(7) > Utc::today().naive_utc() {
+                    debug!("找到历史记录！");
                     Some(g)
                 } else {
                     None
