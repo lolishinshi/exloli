@@ -25,7 +25,7 @@ anyhow = "1.0.31"
 lazy_static = "1.4.0"
 telegraph-rs = "0.4.2"
 tokio = { version = "0.2.22", features = ["tcp", "time", "rt-threaded", "macros", "stream"] }
-futures = "0.3.5"
+futures = "0.3.7"
 unicode-width = "0.1.8"
 
 # 日志
