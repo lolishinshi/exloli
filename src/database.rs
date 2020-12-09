@@ -42,7 +42,7 @@ impl DataBase {
         let url = env::var("DATABASE_URL").expect("请设置 DATABASE_URL");
         let manager = ConnectionManager::new(url);
         let pool = Pool::builder()
-            .max_size(8)
+            .max_size(16)
             .build(manager)
             .expect("连接池建立失败");
         Self { pool }

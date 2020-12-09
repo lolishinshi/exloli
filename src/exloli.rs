@@ -84,9 +84,11 @@ impl ExLoli {
         let old_gallery = match DB.query_gallery_by_title(&gallery.title) {
             Ok(g) => {
                 // 上传量已经达到限制的，不做更新
-                if g.upload_images as usize >= CONFIG.exhentai.max_img_cnt && gallery.limit {
+                // FIXME: 更新过完整版的旧本子没法自动处理，暂时原样重发一次，然后让管理员手动 /full
+                if g.upload_images as usize == CONFIG.exhentai.max_img_cnt && gallery.limit {
                     return Err(anyhow::anyhow!("AlreadyUpload"));
                 }
+
                 // 七天以内上传过的，不重复发，在原消息的基础上更新
                 if g.publish_date + Duration::days(7) > Utc::today().naive_utc() {
                     debug!("找到历史记录！");

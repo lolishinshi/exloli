@@ -182,15 +182,17 @@ impl<'a> FullGalleryInfo<'a> {
             for _ in 0..5i32 {
                 let result = self.upload_image(&url).await;
                 match result {
-                    Ok(v) => {
-                        DB.insert_image(&url, &v).expect("插入图片失败");
-                        return Ok(v);
-                    }
+                    Ok(v) => match DB.insert_image(&url, &v) {
+                        Err(e) => {
+                            error!("插入图片地址失败：{}", e);
+                        }
+                        _ => return Ok(v),
+                    },
                     Err(e) => {
                         error!("获取图片地址失败：{}", e);
-                        delay_for(Duration::from_secs(10)).await;
                     }
                 }
+                delay_for(Duration::from_secs(10)).await;
             }
             Err(format_err!("无法获图片地址"))
         };

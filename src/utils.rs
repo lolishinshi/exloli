@@ -23,34 +23,33 @@ fn pad_left(s: &str, len: usize) -> Cow<str> {
 
 /// 将 tag 转换为可以直接发送至 tg 的文本格式
 pub fn tags_to_string(tags: &[(String, Vec<String>)]) -> String {
-    let trans = vec![
+    let replace_table = vec![
         (" ", "_"),
         ("_|_", " #"),
         ("-", "_"),
         ("/", "_"),
         ("·", "_"),
     ];
-    tags.iter()
-        .map(|(k, v)| {
-            let v = v
-                .iter()
-                .map(|s| {
-                    let mut s = TRANS.trans(k, s).to_owned();
-                    for (from, to) in trans.iter() {
-                        s = s.replace(from, to);
-                    }
-                    format!("#{}", s)
-                })
-                .collect::<Vec<_>>()
-                .join(" ");
-            format!(
-                "<code>{}</code>: {}",
-                pad_left(TRANS.trans("rows", k), 6),
-                v
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
+    let trans = |k: &str, s: &str| -> String {
+        // 形如 "usashiro mani | mani" 的 tag 只需要取第一部分翻译
+        let name = s.split(" | ").next().unwrap();
+        let mut s = TRANS.trans(k, s).to_owned();
+        if s == name {}
+        for (from, to) in replace_table.iter() {
+            s = s.replace(from, to);
+        }
+        format!("#{}", s)
+    };
+    let mut ret = vec![];
+    for (k, v) in tags {
+        let v = v.iter().map(|s| trans(k, s)).collect::<Vec<_>>().join(" ");
+        ret.push(format!(
+            "<code>{}</code>: {}",
+            pad_left(TRANS.trans("rows", k), 6),
+            v
+        ))
+    }
+    ret.join("\n")
 }
 
 /// 从 e 站 url 中获取数字格式的 id，第二项为 token
