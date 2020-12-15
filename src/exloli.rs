@@ -37,12 +37,13 @@ impl ExLoli {
             if let Ok(g) = DB.query_gallery_by_url(&gallery.url) {
                 let now = Utc::now();
                 let duration = Utc::today().naive_utc() - g.publish_date;
+                // 已删除画廊不更新
                 // 7 天前发的本子不更新
-                if duration.num_days() > 7 {
-                    continue;
-                }
                 // 两天前的本子，逢 4 小时更新
-                if duration.num_days() > 2 && now.hour() % 4 != 0 {
+                if (g.score - -1.0).abs() < f32::EPSILON
+                    || duration.num_days() > 7
+                    || (duration.num_days() > 2 && now.hour() % 4 != 0)
+                {
                     continue;
                 }
 
