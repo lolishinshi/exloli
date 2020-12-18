@@ -34,37 +34,42 @@ impl ExLoli {
         // 从后往前爬, 保持顺序
         for gallery in galleries.into_iter().rev() {
             info!("检测中：{}", gallery.url);
-            if let Ok(g) = DB.query_gallery_by_url(&gallery.url) {
-                let now = Utc::now();
-                let duration = Utc::today().naive_utc() - g.publish_date;
-                // 已删除画廊不更新
-                // 7 天前发的本子不更新
-                // 两天前的本子，逢 4 小时更新
-                if (g.score - -1.0).abs() < f32::EPSILON
-                    || duration.num_days() > 7
-                    || (duration.num_days() > 2 && now.hour() % 4 != 0)
-                {
-                    continue;
+            match DB.query_gallery_by_url(&gallery.url) {
+                Ok(g) => {
+                    self.update_gallery(g, gallery).await.log_on_error().await;
                 }
-
-                // 检测是否需要更新 tag
-                // TODO: 将 tags 塞到 BasicInfo 里
-                let info = gallery.into_full_info().await?;
-                let new_tags = serde_json::to_string(&info.tags)?;
-                if new_tags != g.tags {
-                    info!("tag 有更新，同步中...");
-                    info!("画廊名称: {}", info.title);
-                    info!("画廊地址: {}", info.url);
-                    self.update_tags(g, &info).await?;
+                _ => {
+                    self.upload_gallery(gallery).await.log_on_error().await;
                 }
-                continue;
             }
-            self.upload_gallery_to_telegram(gallery)
-                .await
-                .log_on_error()
-                .await;
+        }
+        Ok(())
+    }
+
+    /// 更新画廊 tag
+    async fn update_gallery<'a>(&'a self, g: Gallery, gallery: BasicGalleryInfo<'a>) -> Result<()> {
+        let now = Utc::now();
+        let duration = Utc::today().naive_utc() - g.publish_date;
+        // 已删除画廊不更新
+        // 7 天前发的本子不更新
+        // 两天前的本子，逢 4 小时更新
+        if (g.score - -1.0).abs() < f32::EPSILON
+            || duration.num_days() > 7
+            || (duration.num_days() > 2 && now.hour() % 4 != 0)
+        {
+            return Ok(());
         }
 
+        // 检测是否需要更新 tag
+        // TODO: 将 tags 塞到 BasicInfo 里
+        let info = gallery.into_full_info().await?;
+        let new_tags = serde_json::to_string(&info.tags)?;
+        if new_tags != g.tags {
+            info!("tag 有更新，同步中...");
+            info!("画廊名称: {}", info.title);
+            info!("画廊地址: {}", info.url);
+            self.update_tags(g, &info).await?;
+        }
         Ok(())
     }
 
@@ -72,11 +77,11 @@ impl ExLoli {
     pub async fn upload_gallery_by_url(&self, url: &str) -> Result<()> {
         let mut gallery = self.exhentai.get_gallery_by_url(url).await?;
         gallery.limit = false;
-        self.upload_gallery_to_telegram(gallery).await
+        self.upload_gallery(gallery).await
     }
 
     /// 将画廊上传到 telegram
-    async fn upload_gallery_to_telegram<'a>(&'a self, gallery: BasicGalleryInfo<'a>) -> Result<()> {
+    async fn upload_gallery<'a>(&'a self, gallery: BasicGalleryInfo<'a>) -> Result<()> {
         info!("上传中，画廊名称: {}", gallery.title);
 
         let gallery = gallery.into_full_info().await?;

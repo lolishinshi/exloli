@@ -202,7 +202,7 @@ async fn poll_handler(poll: UpdateWithCx<Poll>) -> Result<()> {
         .map(|(i, s)| (i as i32 + 1) * s.voter_count)
         .sum::<i32>() as f32;
     let score = score / man_cnt;
-    info!("投票状态变动：{} -> {}", poll.update.id, score);
+    debug!("投票状态变动：{} -> {}", poll.update.id, score);
     DB.update_score(&poll.update.id, score)
 }
 
