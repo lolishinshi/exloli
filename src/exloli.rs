@@ -197,10 +197,7 @@ impl ExLoli {
             article,
             escape(&gallery.title)
         ));
-        tags.push_str(&format!(
-            "\n<code>原始地址</code>：<a href=\"{0}\">{0}</a>",
-            gallery.url
-        ));
+        tags.push_str(&format!("\n<code>原始地址</code>：{}", gallery.url));
         tags
     }
 }

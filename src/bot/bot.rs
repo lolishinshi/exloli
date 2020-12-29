@@ -24,6 +24,7 @@ async fn check_is_channel_admin(message: &UpdateWithCx<Message>) -> Result<bool>
     if from_user
         .map(|u| u.username == Some("GroupAnonymousBot".into()))
         .unwrap_or(false)
+        && message.update.is_from_my_group()
     {
         return Ok(true);
     }
@@ -173,7 +174,7 @@ async fn message_handler(exloli: Arc<ExLoli>, message: Update) -> Result<()> {
     trace!("{:#?}", message.update);
 
     // 如果是新本子上传的消息，则回复投票
-    if is_new_gallery(&message.update) && message.update.is_from_group() {
+    if is_new_gallery(&message.update) && message.update.is_from_my_group() {
         send_pool(&message).await.log_on_error().await;
     }
 

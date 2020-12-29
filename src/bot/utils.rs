@@ -27,7 +27,7 @@ macro_rules! unwrap {
 }
 
 pub trait MessageExt {
-    fn is_from_group(&self) -> bool;
+    fn is_from_my_group(&self) -> bool;
     fn get_command<T: BotCommand>(&self) -> Option<T>;
     fn from_username(&self) -> Option<&String>;
     fn reply_to_user(&self) -> Option<&User>;
@@ -37,7 +37,7 @@ pub trait MessageExt {
 
 impl MessageExt for Message {
     // 判断消息来源是否是指定群组
-    fn is_from_group(&self) -> bool {
+    fn is_from_my_group(&self) -> bool {
         match CONFIG.telegram.group_id {
             ChatId::Id(id) => self.chat.id == id,
             _ => todo!(),
