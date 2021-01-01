@@ -29,16 +29,14 @@ async fn check_is_channel_admin(message: &UpdateWithCx<Message>) -> Result<bool>
         return Ok(true);
     }
     // TODO: 缓存管理员名单
-    let channel_admins = send!(BOT.get_chat_administrators(CONFIG.telegram.channel_id.clone()))?;
+    let mut admins = send!(BOT.get_chat_administrators(CONFIG.telegram.channel_id.clone()))?;
+    admins.extend(send!(
+        BOT.get_chat_administrators(CONFIG.telegram.group_id.clone())
+    )?);
     Ok(message
         .update
         .from()
-        .map(|user| {
-            channel_admins
-                .iter()
-                .map(|admin| &admin.user == user)
-                .any(|x| x)
-        })
+        .map(|user| admins.iter().map(|admin| &admin.user == user).any(|x| x))
         .unwrap_or(false))
 }
 

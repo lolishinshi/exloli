@@ -103,7 +103,7 @@ impl<'a> BasicGalleryInfo<'a> {
         debug!("收藏数: {}", fav_cnt);
 
         // 图片页面
-        let mut img_pages = html.xpath_text(r#"//div[@class="gdtl"]/a/@href"#)?;
+        let mut img_pages = html.xpath_text(r#"//div[@id="gdt"]//a/@href"#)?;
 
         // 继续翻页 (如果有
         while let Ok(next_page) = html.xpath_text(r#"//table[@class="ptt"]//td[last()]/a/@href"#) {
@@ -113,7 +113,7 @@ impl<'a> BasicGalleryInfo<'a> {
                 block_on(async { send!(self.client.get(&next_page[0]))?.text().await })
             })?;
             html = parse_html(text)?;
-            img_pages.extend(html.xpath_text(r#"//div[@class="gdtl"]/a/@href"#)?);
+            img_pages.extend(html.xpath_text(r#"//div[@id="gdt"]//a/@href"#)?);
         }
 
         Ok(FullGalleryInfo {
