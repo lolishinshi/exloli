@@ -191,6 +191,6 @@ impl DataBase {
 
 impl Gallery {
     pub fn get_url(&self) -> String {
-        format!("https://exhentai.org/g/{}/{}", self.gallery_id, self.token)
+        format!("https://exhentai.org/g/{}/{}/", self.gallery_id, self.token)
     }
 }
