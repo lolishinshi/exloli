@@ -71,8 +71,8 @@ async fn send_pool(message: &Update) -> Result<()> {
 }
 
 /// 响应 /upload 命令，根据 url 上传指定画廊
-pub async fn upload_gallery(message: &Update, url: &str) -> Result<()> {
-    check_is_owner!(&message);
+async fn upload_gallery(message: &Update, url: &str) -> Result<()> {
+    check_is_owner!(message);
     let reply_message = send!(message.reply_to("收到命令，上传中……"))?.to_chat_or_inline_message();
     let mut text = "上传完毕".to_owned();
     if let Err(e) = EXLOLI.upload_gallery_by_url(&url).await {
@@ -84,7 +84,7 @@ pub async fn upload_gallery(message: &Update, url: &str) -> Result<()> {
 }
 
 async fn delete_gallery(message: &Update) -> Result<()> {
-    check_is_owner!(&message);
+    check_is_owner!(message);
     let to_del = match message.update.reply_to_message() {
         Some(v) => v,
         None => {
@@ -207,13 +207,13 @@ async fn poll_handler(poll: UpdateWithCx<Poll>) -> Result<()> {
 pub async fn start_bot() {
     info!("BOT 启动");
     Dispatcher::new(BOT.clone())
-        .messages_handler(move |rx: DispatcherHandlerRx<Message>| {
-            rx.for_each_concurrent(4, move |message| async move {
+        .messages_handler(|rx: DispatcherHandlerRx<Message>| {
+            rx.for_each_concurrent(4, |message| async {
                 message_handler(message).await.log_on_error().await;
             })
         })
         .polls_handler(|rx: DispatcherHandlerRx<Poll>| {
-            rx.for_each_concurrent(4, |message| async move {
+            rx.for_each_concurrent(4, |message| async {
                 poll_handler(message).await.log_on_error().await;
             })
         })

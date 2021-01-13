@@ -74,10 +74,6 @@ impl DataBase {
             .get_result::<Image>(&self.pool.get()?)?)
     }
 
-    pub fn reset_image_by_url(&self) {
-        todo!()
-    }
-
     pub fn insert_gallery(
         &self,
         info: &FullGalleryInfo,
