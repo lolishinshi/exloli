@@ -1,11 +1,9 @@
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs::read_to_string;
 
-lazy_static! {
-    pub static ref TRANS: Database = Database::new();
-}
+pub static TRANS: Lazy<Database> = Lazy::new(Database::new);
 
 #[derive(Deserialize)]
 pub struct Database {

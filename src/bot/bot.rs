@@ -1,9 +1,7 @@
 use super::utils::*;
-use crate::exloli::ExLoli;
 use crate::*;
 use anyhow::Result;
 use chrono::{Duration, Utc};
-use std::sync::Arc;
 use teloxide::types::*;
 use teloxide::utils::command::BotCommand;
 
@@ -72,11 +70,12 @@ async fn send_pool(message: &Update) -> Result<()> {
     DB.update_poll_id(message_id, &poll_id)
 }
 
-pub async fn upload_gallery(message: &Update, url: &str, exloli: &ExLoli) -> Result<()> {
+/// 响应 /upload 命令，根据 url 上传指定画廊
+pub async fn upload_gallery(message: &Update, url: &str) -> Result<()> {
     check_is_owner!(&message);
     let reply_message = send!(message.reply_to("收到命令，上传中……"))?.to_chat_or_inline_message();
     let mut text = "上传完毕".to_owned();
-    if let Err(e) = exloli.upload_gallery_by_url(&url).await {
+    if let Err(e) = EXLOLI.upload_gallery_by_url(&url).await {
         error!("上传出错：{}", e);
         text = format!("上传失败：{}", e);
     }
@@ -101,7 +100,7 @@ async fn delete_gallery(message: &Update) -> Result<()> {
     Ok(())
 }
 
-async fn update_gallery_to_full(message: &Update, exloli: &ExLoli) -> Result<()> {
+async fn update_gallery_to_full(message: &Update) -> Result<()> {
     check_is_owner!(&message);
     let reply_message =
         send!(message.reply_to("收到命令，将更新该画廊的完整版本……"))?.to_chat_or_inline_message();
@@ -115,7 +114,7 @@ async fn update_gallery_to_full(message: &Update, exloli: &ExLoli) -> Result<()>
     };
 
     let mut text = "更新完毕".to_owned();
-    if let Err(e) = exloli.upload_gallery_by_url(&url).await {
+    if let Err(e) = EXLOLI.upload_gallery_by_url(&url).await {
         error!("上传出错：{}", e);
         text = format!("更新失败：{}", e);
     }
@@ -166,7 +165,7 @@ fn is_new_gallery(message: &Message) -> bool {
         .unwrap_or(false)
 }
 
-async fn message_handler(exloli: Arc<ExLoli>, message: Update) -> Result<()> {
+async fn message_handler(message: Update) -> Result<()> {
     use RuaCommand::*;
 
     trace!("{:#?}", message.update);
@@ -180,13 +179,13 @@ async fn message_handler(exloli: Arc<ExLoli>, message: Update) -> Result<()> {
     if let Some(command) = message.update.get_command() {
         info!("收到命令：{:?}", command);
         match command {
-            Upload(url) => upload_gallery(&message, &url, &exloli).await?,
+            Upload(url) => upload_gallery(&message, &url).await?,
             Delete => delete_gallery(&message).await?,
             Ping => {
                 send!(message.reply_to("pong"))?;
             }
             Best(from, to, cnt) => query_best(&message, from as i64, to as i64, cnt as i64).await?,
-            Full => update_gallery_to_full(&message, &exloli).await?,
+            Full => update_gallery_to_full(&message).await?,
         }
     }
     Ok(())
@@ -205,15 +204,12 @@ async fn poll_handler(poll: UpdateWithCx<Poll>) -> Result<()> {
     DB.update_score(&poll.update.id, score)
 }
 
-pub async fn start_bot(exloli: Arc<ExLoli>) {
+pub async fn start_bot() {
     info!("BOT 启动");
     Dispatcher::new(BOT.clone())
         .messages_handler(move |rx: DispatcherHandlerRx<Message>| {
-            rx.for_each_concurrent(4, move |message| {
-                let exloli = exloli.clone();
-                async move {
-                    message_handler(exloli, message).await.log_on_error().await;
-                }
+            rx.for_each_concurrent(4, move |message| async move {
+                message_handler(message).await.log_on_error().await;
             })
         })
         .polls_handler(|rx: DispatcherHandlerRx<Poll>| {

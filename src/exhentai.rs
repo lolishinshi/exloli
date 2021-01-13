@@ -3,13 +3,13 @@ use crate::{CONFIG, DB};
 use anyhow::{anyhow, Context, Result};
 use futures::executor::block_on;
 use futures::prelude::*;
-use lazy_static::lazy_static;
 use reqwest::header::{self, HeaderMap, HeaderValue};
 use reqwest::{redirect::Policy, Client, Proxy, Response};
 use telegraph_rs::Telegraph;
 use tempfile::NamedTempFile;
 use tokio::time::delay_for;
 
+use once_cell::sync::Lazy;
 use std::io::Write;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
@@ -30,8 +30,8 @@ macro_rules! send {
     };
 }
 
-lazy_static! {
-    static ref HEADERS: HeaderMap = set_header! {
+static HEADERS: Lazy<HeaderMap> = Lazy::new(|| {
+    set_header! {
         ACCEPT => "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         ACCEPT_ENCODING => "gzip, deflate, br",
         ACCEPT_LANGUAGE => "zh-CN,en-US;q=0.7,en;q=0.3",
@@ -41,8 +41,8 @@ lazy_static! {
         REFERER => "https://exhentai.org/",
         UPGRADE_INSECURE_REQUESTS => "1",
         USER_AGENT => "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:67.0) Gecko/20100101 Firefox/67.0"
-    };
-}
+    }
+});
 
 // TODO： 通过调整搜索页面展示的信息将 tag 移到这里来
 /// 基本画廊信息

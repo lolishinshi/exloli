@@ -12,7 +12,8 @@ use crate::database::DataBase;
 use crate::exloli::ExLoli;
 
 use anyhow::Error;
-use lazy_static::lazy_static;
+use futures::executor::block_on;
+use once_cell::sync::Lazy;
 use teloxide::prelude::*;
 use teloxide::types::ParseMode;
 use tokio::time::delay_for;
@@ -20,7 +21,6 @@ use tokio::time::delay_for;
 use std::env;
 use std::path::Path;
 use std::str::FromStr;
-use std::sync::Arc;
 use std::time;
 
 mod bot;
@@ -33,17 +33,15 @@ mod trans;
 mod utils;
 mod xpath;
 
-lazy_static! {
-    static ref CONFIG: Config = Config::new("config.toml").unwrap_or_else(|e| {
-        eprintln!("配置文件解析失败:\n{}", e);
-        std::process::exit(1);
-    });
-    pub static ref BOT: Bot = teloxide::BotBuilder::new()
+static CONFIG: Lazy<Config> = Lazy::new(|| Config::new("config.toml").expect("配置文件解析失败"));
+static BOT: Lazy<Bot> = Lazy::new(|| {
+    teloxide::BotBuilder::new()
         .token(&CONFIG.telegram.token)
         .parse_mode(ParseMode::HTML)
-        .build();
-    pub static ref DB: DataBase = DataBase::init();
-}
+        .build()
+});
+static DB: Lazy<DataBase> = Lazy::new(DataBase::init);
+static EXLOLI: Lazy<ExLoli> = Lazy::new(|| block_on(ExLoli::new()).expect("登录失败"));
 
 #[tokio::main]
 async fn main() {
@@ -85,17 +83,15 @@ async fn run() -> Result<(), Error> {
     }
 
     let debug = matches.opt_present("debug");
-    let exloli = Arc::new(ExLoli::new().await?);
 
     {
-        let exloli = exloli.clone();
-        tokio::spawn(async move { crate::bot::start_bot(exloli).await });
+        tokio::spawn(async move { crate::bot::start_bot().await });
     }
 
     loop {
         if !debug {
             info!("定时更新开始");
-            let result = exloli.scan_and_upload().await;
+            let result = EXLOLI.scan_and_upload().await;
             if let Err(e) = result {
                 error!("定时更新出错：{}", e);
             } else {
