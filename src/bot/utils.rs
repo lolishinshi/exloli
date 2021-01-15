@@ -1,7 +1,6 @@
 use crate::database::Gallery;
 use crate::{CONFIG, DB};
 use teloxide::types::*;
-use teloxide::utils::command::BotCommand;
 
 #[macro_export]
 macro_rules! send {
@@ -10,25 +9,8 @@ macro_rules! send {
     };
 }
 
-#[macro_export]
-macro_rules! unwrap {
-    ($e:expr) => {
-        match $e {
-            Some(v) => v,
-            None => return Ok(()),
-        }
-    };
-    ($e:expr, $r:expr) => {
-        match $e {
-            Some(v) => v,
-            None => return $r,
-        }
-    };
-}
-
 pub trait MessageExt {
     fn is_from_my_group(&self) -> bool;
-    fn get_command<T: BotCommand>(&self) -> Option<T>;
     fn from_username(&self) -> Option<&String>;
     fn reply_to_user(&self) -> Option<&User>;
     fn reply_to_gallery(&self) -> Option<Gallery>;
@@ -42,15 +24,6 @@ impl MessageExt for Message {
             ChatId::Id(id) => self.chat.id == id,
             _ => todo!(),
         }
-    }
-
-    fn get_command<T: BotCommand>(&self) -> Option<T> {
-        if let Some(text) = self.text() {
-            if text.starts_with('/') {
-                return T::parse(&text, &CONFIG.telegram.bot_id).ok();
-            }
-        }
-        None
     }
 
     fn from_username(&self) -> Option<&String> {

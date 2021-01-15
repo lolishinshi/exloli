@@ -1,53 +1,9 @@
 use super::utils::*;
+use crate::bot::command::*;
 use crate::*;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono::{Duration, Utc};
 use teloxide::types::*;
-use teloxide::utils::command::BotCommand;
-
-macro_rules! check_is_owner {
-    ($e:expr) => {
-        if !check_is_channel_admin($e).await? {
-            info!("权限检查失败");
-            send!($e.delete_message())?;
-            return Ok(());
-        }
-    };
-}
-
-// 检测是否是指定频道的管理员
-async fn check_is_channel_admin(message: &UpdateWithCx<Message>) -> Result<bool> {
-    // 先检测是否为匿名管理员
-    let from_user = message.update.from();
-    if from_user
-        .map(|u| u.username == Some("GroupAnonymousBot".into()))
-        .unwrap_or(false)
-        && message.update.is_from_my_group()
-    {
-        return Ok(true);
-    }
-    // TODO: 缓存管理员名单
-    let mut admins = send!(BOT.get_chat_administrators(CONFIG.telegram.channel_id.clone()))?;
-    admins.extend(send!(
-        BOT.get_chat_administrators(CONFIG.telegram.group_id.clone())
-    )?);
-    Ok(message
-        .update
-        .from()
-        .map(|user| admins.iter().map(|admin| &admin.user == user).any(|x| x))
-        .unwrap_or(false))
-}
-
-#[derive(BotCommand, PartialEq, Debug)]
-#[command(rename = "lowercase", parse_with = "split")]
-enum RuaCommand {
-    Upload(String),
-    Ping,
-    Delete,
-    // 最少几天前 最多几天前 多少本
-    Best(u16, u16, u8),
-    Full,
-}
 
 type Update = UpdateWithCx<Message>;
 
@@ -72,7 +28,7 @@ async fn send_pool(message: &Update) -> Result<()> {
 
 /// 响应 /upload 命令，根据 url 上传指定画廊
 async fn upload_gallery(message: &Update, url: &str) -> Result<()> {
-    check_is_owner!(message);
+    info!("执行：/upload {}", url);
     let reply_message = send!(message.reply_to("收到命令，上传中……"))?.to_chat_or_inline_message();
     let mut text = "上传完毕".to_owned();
     if let Err(e) = EXLOLI.upload_gallery_by_url(&url).await {
@@ -83,50 +39,40 @@ async fn upload_gallery(message: &Update, url: &str) -> Result<()> {
     Ok(())
 }
 
-async fn delete_gallery(message: &Update) -> Result<()> {
-    check_is_owner!(message);
-    let to_del = match message.update.reply_to_message() {
-        Some(v) => v,
-        None => {
-            send!(message.reply_to("请回复需要删除的画廊"))?;
-            return Ok(());
-        }
-    };
-    let channel = unwrap!(to_del.forward_from_chat());
-    let mes_id = unwrap!(to_del.forward_from_message_id());
+async fn delete_gallery(message: &Update) -> Result<Message> {
+    info!("执行：/delete");
+    let to_del = message.update.reply_to_message().context("找不到回复")?;
+    let channel = to_del.forward_from_chat().context("获取来源对话失败")?;
+    let mes_id = to_del
+        .forward_from_message_id()
+        .context("获取转发来源失败")?;
     send!(message.bot.delete_message(to_del.chat.id, to_del.id))?;
     send!(message.bot.delete_message(channel.id, *mes_id))?;
     DB.delete_gallery_by_message_id(*mes_id)?;
-    Ok(())
+    let gallery = DB.query_gallery_by_message_id(*mes_id)?;
+    Ok(send!(BOT.send_message(
+        message.chat_id(),
+        format!("画廊 {} 已删除", gallery.get_url())
+    ))?)
 }
 
-async fn update_gallery_to_full(message: &Update) -> Result<()> {
-    check_is_owner!(&message);
+async fn full_gallery(message: &Update) -> Result<Message> {
+    info!("执行：/full");
     let reply_message =
         send!(message.reply_to("收到命令，将更新该画廊的完整版本……"))?.to_chat_or_inline_message();
 
-    let url = match message.update.reply_to_gallery() {
-        Some(v) => v.get_url(),
-        None => {
-            send!(message.reply_to("请回复需要更新的画廊"))?;
-            return Ok(());
-        }
-    };
+    let gallery = message.update.reply_to_gallery().context("找不到回复")?;
 
     let mut text = "更新完毕".to_owned();
-    if let Err(e) = EXLOLI.upload_gallery_by_url(&url).await {
+    if let Err(e) = EXLOLI.upload_gallery_by_url(&gallery.get_url()).await {
         error!("上传出错：{}", e);
         text = format!("更新失败：{}", e);
     }
-    send!(message.bot.edit_message_text(reply_message, text))?;
-    Ok(())
+    Ok(send!(message.bot.edit_message_text(reply_message, text))?)
 }
 
 async fn query_best(message: &Update, from: i64, to: i64, cnt: i64) -> Result<()> {
-    if cnt > 20 {
-        send!(message.reply_to("最多展示前 20 本"))?;
-        return Ok(());
-    }
+    info!("执行：/best {} {} {}", from, to, cnt);
     let (from_d, to_d) = (
         Utc::today().naive_utc() - Duration::days(from),
         Utc::today().naive_utc() - Duration::days(to),
@@ -154,7 +100,10 @@ async fn query_best(message: &Update, from: i64, to: i64, cnt: i64) -> Result<()
 /// 判断是否是新本子的发布信息
 fn is_new_gallery(message: &Message) -> bool {
     // 判断是否是由官方 bot 转发的
-    let user = unwrap!(message.from(), false);
+    let user = match message.from() {
+        Some(v) => v,
+        _ => return false,
+    };
     if user.id != 777000 {
         return false;
     }
@@ -176,17 +125,43 @@ async fn message_handler(message: Update) -> Result<()> {
     }
 
     // 其他命令
-    if let Some(command) = message.update.get_command() {
-        info!("收到命令：{:?}", command);
-        match command {
-            Upload(url) => upload_gallery(&message, &url).await?,
-            Delete => delete_gallery(&message).await?,
-            Ping => {
-                send!(message.reply_to("pong"))?;
+    let mut to_delete = vec![];
+    match RuaCommand::parse(&message, &CONFIG.telegram.bot_id) {
+        Err(CommandError::WrongCommand(help)) => {
+            info!("错误的命令：{}", help);
+            if !help.is_empty() {
+                to_delete.push(send!(message.reply_to(help))?.id);
+                to_delete.push(message.update.id);
+            } else {
+                send!(message.delete_message())?;
             }
-            Best(from, to, cnt) => query_best(&message, from as i64, to as i64, cnt as i64).await?,
-            Full => update_gallery_to_full(&message).await?,
         }
+        Ok(Ping) => {
+            to_delete.push(send!(message.reply_to("pong"))?.id);
+            to_delete.push(message.update.id);
+        }
+        Ok(Full) => {
+            to_delete.push(full_gallery(&message).await?.id);
+        }
+        Ok(Delete) => {
+            to_delete.push(delete_gallery(&message).await?.id);
+        }
+        Ok(Upload(url)) => upload_gallery(&message, &url).await?,
+        Ok(Best([from, to, cnt])) => {
+            query_best(&message, from as i64, to as i64, cnt as i64).await?
+        }
+        _ => {}
+    }
+
+    // 群组内的消息
+    if !to_delete.is_empty() && message.update.is_from_my_group() {
+        let chat_id = message.chat_id();
+        tokio::spawn(async move {
+            delay_for(time::Duration::from_secs(60)).await;
+            for id in to_delete {
+                send!(BOT.delete_message(chat_id, id)).log_on_error().await;
+            }
+        });
     }
     Ok(())
 }
@@ -208,12 +183,12 @@ pub async fn start_bot() {
     info!("BOT 启动");
     Dispatcher::new(BOT.clone())
         .messages_handler(|rx: DispatcherHandlerRx<Message>| {
-            rx.for_each_concurrent(4, |message| async {
+            rx.for_each_concurrent(8, |message| async {
                 message_handler(message).await.log_on_error().await;
             })
         })
         .polls_handler(|rx: DispatcherHandlerRx<Poll>| {
-            rx.for_each_concurrent(4, |message| async {
+            rx.for_each_concurrent(8, |message| async {
                 poll_handler(message).await.log_on_error().await;
             })
         })
