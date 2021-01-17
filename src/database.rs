@@ -5,6 +5,7 @@ use anyhow::Result;
 use chrono::prelude::*;
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool};
+use diesel::sqlite::Sqlite;
 use std::env;
 
 embed_migrations!("migrations");
@@ -137,14 +138,22 @@ impl DataBase {
     }
 
     /// 查询自指定日期以来分数大于指定分数的若干本本子
-    pub fn query_best(&self, from: NaiveDate, to: NaiveDate, cnt: i64) -> Result<Vec<Gallery>> {
+    pub fn query_best(&self, from: NaiveDate, to: NaiveDate, mut cnt: i64) -> Result<Vec<Gallery>> {
+        let ordering: Box<dyn BoxableExpression<gallery::table, Sqlite, SqlType = ()>> = if cnt > 0
+        {
+            Box::new(gallery::score.desc())
+        } else {
+            cnt = -cnt;
+            Box::new(gallery::score.asc())
+        };
         Ok(gallery::table
             .filter(
                 gallery::publish_date
                     .ge(to)
-                    .and(gallery::publish_date.le(from)),
+                    .and(gallery::publish_date.le(from))
+                    .and(gallery::score.ne(-1.0)),
             )
-            .order_by(gallery::score.desc())
+            .order_by(ordering)
             .limit(cnt)
             .load::<Gallery>(&self.pool.get()?)?)
     }

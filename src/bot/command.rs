@@ -23,7 +23,7 @@ pub enum RuaCommand {
     // 用该命令回复一条画廊以将其删除
     Delete,
     // 按评分高低查询一段时间内的本子，格式 /best 最少几天前 最多几天前 多少本
-    Best([u16; 3]),
+    Best([i64; 3]),
     // 用该命令回复一条画廊以上传其完整版本
     Full,
 }
@@ -80,12 +80,11 @@ impl RuaCommand {
                 }
             }
             ("best", _) => match parse_command_best(args) {
-                Some(v) => {
-                    if v[2] > 20 {
-                        Err(WrongCommand("最多展示前二十本"))
-                    } else {
-                        Ok(RuaCommand::Best(v))
-                    }
+                Some(mut v) => {
+                    v[0] = v[0].min(3650);
+                    v[1] = v[1].min(3650);
+                    v[2] = v[2].min(20).max(-20);
+                    Ok(RuaCommand::Best(v))
                 }
                 _ => Err(WrongCommand("用法：/best 起始时间 终止时间 最大数量")),
             },
@@ -101,13 +100,13 @@ impl RuaCommand {
 }
 
 /// 将字符串解析为三个数字
-fn parse_command_best(input: &str) -> Option<[u16; 3]> {
+fn parse_command_best(input: &str) -> Option<[i64; 3]> {
     let v = input
         .split_ascii_whitespace()
-        .map(u16::from_str)
+        .map(i64::from_str)
         .collect::<Result<Vec<_>, _>>()
         .ok();
-    if let Some(v) = v.and_then(|v| TryInto::<[u16; 3]>::try_into(v).ok()) {
+    if let Some(v) = v.and_then(|v| TryInto::<[i64; 3]>::try_into(v).ok()) {
         return Some(v);
     }
     None

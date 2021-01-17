@@ -27,7 +27,7 @@ async fn send_pool(message: &Update) -> Result<()> {
 }
 
 /// 响应 /upload 命令，根据 url 上传指定画廊
-async fn upload_gallery(message: &Update, url: &str) -> Result<()> {
+async fn upload_gallery(message: &Update, url: &str) -> Result<Message> {
     info!("执行：/upload {}", url);
     let reply_message = send!(message.reply_to("收到命令，上传中……"))?.to_chat_or_inline_message();
     let mut text = "上传完毕".to_owned();
@@ -35,8 +35,7 @@ async fn upload_gallery(message: &Update, url: &str) -> Result<()> {
         error!("上传出错：{}", e);
         text = format!("上传失败：{}", e);
     }
-    send!(message.bot.edit_message_text(reply_message, text))?;
-    Ok(())
+    Ok(send!(message.bot.edit_message_text(reply_message, text))?)
 }
 
 async fn delete_gallery(message: &Update) -> Result<Message> {
@@ -142,14 +141,17 @@ async fn message_handler(message: Update) -> Result<()> {
         }
         Ok(Full) => {
             to_delete.push(full_gallery(&message).await?.id);
+            to_delete.push(message.update.id);
         }
         Ok(Delete) => {
             to_delete.push(delete_gallery(&message).await?.id);
+            to_delete.push(message.update.id);
         }
-        Ok(Upload(url)) => upload_gallery(&message, &url).await?,
-        Ok(Best([from, to, cnt])) => {
-            query_best(&message, from as i64, to as i64, cnt as i64).await?
+        Ok(Upload(url)) => {
+            to_delete.push(upload_gallery(&message, &url).await?.id);
+            to_delete.push(message.update.id);
         }
+        Ok(Best([from, to, cnt])) => query_best(&message, from, to, cnt).await?,
         _ => {}
     }
 
