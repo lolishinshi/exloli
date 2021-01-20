@@ -84,58 +84,61 @@ impl ExLoli {
     async fn upload_gallery<'a>(&'a self, gallery: BasicGalleryInfo<'a>) -> Result<()> {
         info!("上传中，画廊名称: {}", gallery.title);
 
-        let gallery = gallery.into_full_info().await?;
+        let mut gallery = gallery.into_full_info().await?;
 
         // 判断是否上传过并且不需要更新
         let old_gallery = match DB.query_gallery_by_title(&gallery.title) {
             Ok(g) => {
                 // 上传量已经达到限制的，不做更新
-                // FIXME: 更新过完整版的旧本子没法自动处理，暂时原样重发一次，然后让管理员手动 /full
                 if g.upload_images as usize == CONFIG.exhentai.max_img_cnt && gallery.limit {
                     return Err(anyhow::anyhow!("AlreadyUpload"));
                 }
-
+                // FIXME: 当前判断方法可能会误判，而且修改最大图片数量以后会失效
+                // 如果曾经更新过完整版，则继续上传完整版
+                if g.upload_images as usize > CONFIG.exhentai.max_img_cnt {
+                    gallery.limit = false;
+                }
                 // 七天以内上传过的，不重复发，在原消息的基础上更新
                 if g.publish_date + Duration::days(7) > Utc::today().naive_utc() {
-                    debug!("找到历史记录！");
+                    info!("找到历史上传：{}", g.message_id);
                     Some(g)
                 } else {
+                    info!("历史上传已过期：{}", g.message_id);
                     None
                 }
             }
             _ => None,
         };
 
-        let img_cnt = gallery.get_image_lists().len();
         let img_urls = gallery.upload_images_to_telegraph().await?;
 
         // 上传到 telegraph
-        let overflow = gallery.img_pages.len() != img_cnt;
         let title = gallery.title_jp.as_ref().unwrap_or(&gallery.title);
         let page = self
-            .publish_to_telegraph(title, &img_urls, overflow)
+            .publish_to_telegraph(title, &img_urls, gallery.img_pages.len())
             .await?;
         info!("文章地址: {}", page.url);
 
-        if let Some(g) = old_gallery {
-            self.edit_telegram(g.message_id, &gallery, &page.url).await
-        } else {
-            let message = self.publish_to_telegram(&gallery, &page.url).await?;
-            DB.insert_gallery(&gallery, page.url, message.id)
+        match old_gallery {
+            Some(g) => self.update_message(&g, &gallery, &page.url).await,
+            None => {
+                let message = self.publish_to_telegram(&gallery, &page.url).await?;
+                DB.insert_gallery(&gallery, page.url, message.id)
+            }
         }
     }
 
-    /// 编辑旧消息
-    async fn edit_telegram<'a>(
+    /// 更新旧画廊
+    async fn update_message<'a>(
         &self,
-        message_id: i32,
+        old_gallery: &Gallery,
         gallery: &FullGalleryInfo<'a>,
         article: &str,
     ) -> Result<()> {
         info!("更新 Telegram 频道消息");
         let message = ChatOrInlineMessage::Chat {
             chat_id: CONFIG.telegram.channel_id.clone(),
-            message_id,
+            message_id: old_gallery.message_id,
         };
         let text = Self::get_message_string(gallery, article);
         match BOT.edit_message_text(message, &text).send().await {
@@ -144,9 +147,14 @@ impl ExLoli {
                 ..
             }) => {
                 error!("{:?}", e);
-                DB.update_gallery(&gallery, article.to_owned(), message_id)
+                DB.update_gallery(
+                    &old_gallery,
+                    &gallery,
+                    article.to_owned(),
+                    old_gallery.message_id,
+                )
             }
-            Ok(mes) => DB.update_gallery(&gallery, article.to_owned(), mes.id),
+            Ok(mes) => DB.update_gallery(&old_gallery, &gallery, article.to_owned(), mes.id),
             Err(e) => Err(e.into()),
         }
     }
@@ -155,13 +163,17 @@ impl ExLoli {
     async fn publish_to_telegraph<'a>(
         &self,
         title: &str,
-        img_urls: &[String],
-        overflow: bool,
+        uploaded_urls: &[String],
+        raw_urls_cnt: usize,
     ) -> Result<Page> {
         info!("上传到 Telegraph");
-        let mut content = img_urls_to_html(&img_urls);
-        if overflow {
-            content.push_str(r#"<p>图片数量过多, 只显示部分. 完整版请前往 E 站观看.</p>"#);
+        let mut content = img_urls_to_html(&uploaded_urls);
+        if uploaded_urls.len() != raw_urls_cnt {
+            content.push_str(&format!(
+                "<p>图片数量过多, 只显示 {}/{}. 完整版请前往 E 站观看.</p>",
+                uploaded_urls.len(),
+                raw_urls_cnt
+            ));
         }
         self.telegraph
             .create_page(title, &html_to_node(&content), false)
@@ -184,8 +196,7 @@ impl ExLoli {
     }
 
     async fn update_tags<'a>(&self, og: Gallery, ng: &FullGalleryInfo<'a>) -> Result<()> {
-        self.edit_telegram(og.message_id, &ng, &og.telegraph)
-            .await?;
+        self.update_message(&og, &ng, &og.telegraph).await?;
         Ok(())
     }
 

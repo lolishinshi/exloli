@@ -101,9 +101,10 @@ impl DataBase {
     }
 
     // TODO: 根据 grep.app 上的代码优化一下自己的代码
-    /// 根据标题更新画廊
+    /// 更新旧画廊信息
     pub fn update_gallery(
         &self,
+        old_gallery: &Gallery,
         info: &FullGalleryInfo,
         telegraph: String,
         message_id: i32,
@@ -111,11 +112,7 @@ impl DataBase {
         debug!("更新画廊数据");
         let (gallery_id, token) = get_id_from_gallery(&info.url);
         diesel::update(gallery::table)
-            .filter(
-                gallery::title
-                    .eq(&info.title)
-                    .or(gallery::gallery_id.eq(gallery_id)),
-            )
+            .filter(gallery::gallery_id.eq(old_gallery.gallery_id))
             .set((
                 gallery::gallery_id.eq(gallery_id),
                 gallery::token.eq(token),
@@ -181,9 +178,12 @@ impl DataBase {
             .get_result::<Gallery>(&self.pool.get()?)?)
     }
 
+    /// 查询最近一次发布的符合标题的画廊
     pub fn query_gallery_by_title(&self, title: &str) -> Result<Gallery> {
         Ok(gallery::table
             .filter(gallery::title.eq(title))
+            .order_by(gallery::gallery_id.desc())
+            .limit(1)
             .get_result::<Gallery>(&self.pool.get()?)?)
     }
 
