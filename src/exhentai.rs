@@ -262,6 +262,7 @@ impl ExHentai {
         let mut client = Client::builder()
             .redirect(custom)
             .cookie_store(true)
+            .timeout(Duration::from_secs(15))
             .default_headers(HEADERS.clone());
         if let Some(proxy) = &CONFIG.exhentai.proxy {
             client = client.proxy(Proxy::all(proxy)?)
@@ -303,6 +304,7 @@ impl ExHentai {
 
         let mut client = Client::builder()
             .cookie_store(true)
+            .timeout(Duration::from_secs(15))
             .default_headers(headers);
         if let Some(proxy) = &CONFIG.exhentai.proxy {
             client = client.proxy(Proxy::all(proxy)?)
