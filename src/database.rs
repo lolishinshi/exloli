@@ -148,7 +148,7 @@ impl DataBase {
                 gallery::publish_date
                     .ge(to)
                     .and(gallery::publish_date.le(from))
-                    .and(gallery::score.ne(-1.0)),
+                    .and(gallery::score.gt(0.0)),
             )
             .order_by(ordering)
             .limit(cnt)
