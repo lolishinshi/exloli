@@ -115,6 +115,7 @@ impl DataBase {
             .filter(gallery::gallery_id.eq(old_gallery.gallery_id))
             .set((
                 gallery::gallery_id.eq(gallery_id),
+                gallery::title.eq(&info.title),
                 gallery::token.eq(token),
                 gallery::message_id.eq(message_id),
                 gallery::telegraph.eq(telegraph),

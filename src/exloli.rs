@@ -46,7 +46,7 @@ impl ExLoli {
         Ok(())
     }
 
-    /// 更新画廊 tag
+    /// 更新画廊信息
     async fn update_gallery<'a>(&'a self, g: Gallery, gallery: BasicGalleryInfo<'a>) -> Result<()> {
         let now = Utc::now();
         let duration = Utc::today().naive_utc() - g.publish_date;
@@ -68,7 +68,7 @@ impl ExLoli {
             info!("tag 有更新，同步中...");
             info!("画廊名称: {}", info.title);
             info!("画廊地址: {}", info.url);
-            self.update_tags(g, &info).await?;
+            self.update_gallery_info(g, &info).await?;
         }
         Ok(())
     }
@@ -195,7 +195,7 @@ impl ExLoli {
             .await?)
     }
 
-    async fn update_tags<'a>(&self, og: Gallery, ng: &FullGalleryInfo<'a>) -> Result<()> {
+    async fn update_gallery_info<'a>(&self, og: Gallery, ng: &FullGalleryInfo<'a>) -> Result<()> {
         self.update_message(&og, &ng, &og.telegraph).await?;
         Ok(())
     }
@@ -204,11 +204,11 @@ impl ExLoli {
     fn get_message_string<'a>(gallery: &FullGalleryInfo<'a>, article: &str) -> String {
         let mut tags = tags_to_string(&gallery.tags);
         tags.push_str(&format!(
-            "\n<code>  预览</code>：<a href=\"{}\">{}</a>",
+            "\n<code>  预览</code>: <a href=\"{}\">{}</a>",
             article,
             escape(&gallery.title)
         ));
-        tags.push_str(&format!("\n<code>原始地址</code>：{}", gallery.url));
+        tags.push_str(&format!("\n<code>原始地址</code>: {}", gallery.url));
         tags
     }
 }
