@@ -30,15 +30,18 @@ pub fn tags_to_string(tags: &[(String, Vec<String>)]) -> String {
         ("/", "_"),
         ("·", "_"),
     ];
-    let trans = |k: &str, s: &str| -> String {
+    let trans = |namespace: &str, string: &str| -> String {
         // 形如 "usashiro mani | mani" 的 tag 只需要取第一部分翻译
-        let name = s.split(" | ").next().unwrap();
-        let mut s = TRANS.trans(k, s).to_owned();
-        if s == name {}
-        for (from, to) in replace_table.iter() {
-            s = s.replace(from, to);
+        let to_translate = string.split(" | ").next().unwrap();
+        let mut result = TRANS.trans(namespace, to_translate).to_owned();
+        // 没有翻译的话，还是使用原始字符串
+        if result == to_translate {
+            result = string.to_owned();
         }
-        format!("#{}", s)
+        for (from, to) in replace_table.iter() {
+            result = result.replace(from, to);
+        }
+        format!("#{}", result)
     };
     let mut ret = vec![];
     for (k, v) in tags {
