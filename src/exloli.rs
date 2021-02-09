@@ -87,7 +87,7 @@ impl ExLoli {
         let mut gallery = gallery.into_full_info().await?;
 
         // 判断是否上传过并且不需要更新
-        let old_gallery = match DB.query_gallery_by_title(&gallery.title) {
+        let (need_update, old_gallery) = match DB.query_gallery_by_title(&gallery.title) {
             Ok(g) => {
                 // 上传量已经达到限制的，不做更新
                 if g.upload_images as usize == CONFIG.exhentai.max_img_cnt && gallery.limit {
@@ -101,13 +101,13 @@ impl ExLoli {
                 // 七天以内上传过的，不重复发，在原消息的基础上更新
                 if g.publish_date + Duration::days(7) > Utc::today().naive_utc() {
                     info!("找到历史上传：{}", g.message_id);
-                    Some(g)
+                    (true, Some(g))
                 } else {
                     info!("历史上传已过期：{}", g.message_id);
-                    None
+                    (false, Some(g))
                 }
             }
-            _ => None,
+            _ => (false, None),
         };
 
         let img_urls = gallery.upload_images_to_telegraph().await?;
@@ -115,13 +115,22 @@ impl ExLoli {
         // 上传到 telegraph
         let title = gallery.title_jp.as_ref().unwrap_or(&gallery.title);
         let page = self
-            .publish_to_telegraph(title, &img_urls, gallery.img_pages.len())
+            .publish_to_telegraph(
+                title,
+                &img_urls,
+                gallery.img_pages.len(),
+                if !need_update {
+                    old_gallery.as_ref().map(|v| v.upload_images as usize)
+                } else {
+                    None
+                },
+            )
             .await?;
         info!("文章地址: {}", page.url);
 
-        match old_gallery {
-            Some(g) => self.update_message(&g, &gallery, &page.url).await,
-            None => {
+        match (need_update, old_gallery) {
+            (true, Some(g)) => self.update_message(&g, &gallery, &page.url).await,
+            _ => {
                 let message = self.publish_to_telegram(&gallery, &page.url).await?;
                 DB.insert_gallery(&gallery, page.url, message.id)
             }
@@ -164,16 +173,22 @@ impl ExLoli {
         &self,
         title: &str,
         uploaded_urls: &[String],
-        raw_urls_cnt: usize,
+        total_urls_cnt: usize,
+        last_urls_cnt: Option<usize>,
     ) -> Result<Page> {
         info!("上传到 Telegraph");
         let mut content = img_urls_to_html(&uploaded_urls);
-        if uploaded_urls.len() != raw_urls_cnt {
-            content.push_str(&format!(
-                "<p>图片数量过多, 只显示 {}/{}. 完整版请前往 E 站观看.</p>",
-                uploaded_urls.len(),
-                raw_urls_cnt
-            ));
+        content.push_str("<p>");
+        content.push_str(&format!(
+            "已上传 {}/{}",
+            uploaded_urls.len(),
+            total_urls_cnt,
+        ));
+        if let Some(v) = last_urls_cnt {
+            content.push_str(&format!("，上次上传到 {}", v));
+        }
+        if uploaded_urls.len() != total_urls_cnt {
+            content.push_str("，完整版请前往 E 站观看");
         }
         self.telegraph
             .create_page(title, &html_to_node(&content), false)
