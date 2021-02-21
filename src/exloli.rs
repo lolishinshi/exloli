@@ -129,15 +129,22 @@ impl ExLoli {
         info!("文章地址: {}", page.url);
 
         match (need_update, old_gallery) {
+            // 需要原地更新的旧本子，直接编辑原来的消息
             (true, Some(g)) => self.update_message(&g, &gallery, &page.url).await,
-            _ => {
+            // 不需要原地更新的旧本子，发布新消息
+            (false, Some(g)) => {
+                let message = self.publish_to_telegram(&gallery, &page.url).await?;
+                DB.update_gallery(&g, &gallery, page.url, message.id)
+            }
+            // 新本子，直接发布
+            (_, None) => {
                 let message = self.publish_to_telegram(&gallery, &page.url).await?;
                 DB.insert_gallery(&gallery, page.url, message.id)
             }
         }
     }
 
-    /// 更新旧画廊
+    /// 更新旧消息并同时更新数据库
     async fn update_message<'a>(
         &self,
         old_gallery: &Gallery,
@@ -178,17 +185,20 @@ impl ExLoli {
     ) -> Result<Page> {
         info!("上传到 Telegraph");
         let mut content = img_urls_to_html(&uploaded_urls);
-        content.push_str("<p>");
-        content.push_str(&format!(
-            "已上传 {}/{}",
-            uploaded_urls.len(),
-            total_urls_cnt,
-        ));
-        if let Some(v) = last_urls_cnt {
-            content.push_str(&format!("，上次上传到 {}", v));
-        }
-        if uploaded_urls.len() != total_urls_cnt {
-            content.push_str("，完整版请前往 E 站观看");
+        if last_urls_cnt.is_some() || uploaded_urls.len() != total_urls_cnt {
+            content.push_str("<p>");
+            content.push_str(&format!(
+                "已上传 {}/{}",
+                uploaded_urls.len(),
+                total_urls_cnt,
+            ));
+            if let Some(v) = last_urls_cnt {
+                content.push_str(&format!("，上次上传到 {}", v));
+            }
+            if uploaded_urls.len() != total_urls_cnt {
+                content.push_str("，完整版请前往 E 站观看");
+            }
+            content.push_str("</p>");
         }
         self.telegraph
             .create_page(title, &html_to_node(&content), false)

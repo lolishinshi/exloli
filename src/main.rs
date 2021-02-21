@@ -46,6 +46,7 @@ static EXLOLI: Lazy<ExLoli> = Lazy::new(|| block_on(ExLoli::new()).expect("ç™»å½
 #[tokio::main]
 async fn main() {
     pretty_env_logger::formatted_builder()
+        .format_timestamp_secs()
         .write_style(pretty_env_logger::env_logger::WriteStyle::Auto)
         .filter(Some("teloxide"), log::LevelFilter::Error)
         .filter(
