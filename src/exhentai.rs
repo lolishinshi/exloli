@@ -55,6 +55,8 @@ pub struct BasicGalleryInfo<'a> {
     pub url: String,
     /// 是否限制图片数量
     pub limit: bool,
+    /// 这是否是一次更新操作，即永远不发布新消息s
+    pub update: bool,
 }
 
 impl<'a> BasicGalleryInfo<'a> {
@@ -351,6 +353,7 @@ impl ExHentai {
                 title,
                 url,
                 limit: true,
+                update: false,
             })
         }
 
@@ -380,6 +383,7 @@ impl ExHentai {
             title,
             url: url.to_owned(),
             limit: true,
+            update: false,
         })
     }
 }

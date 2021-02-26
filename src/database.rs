@@ -10,7 +10,7 @@ use std::env;
 
 embed_migrations!("migrations");
 
-#[derive(Queryable, Insertable)]
+#[derive(Queryable, Insertable, PartialEq, Debug)]
 #[table_name = "gallery"]
 pub struct Gallery {
     pub gallery_id: i32,

@@ -1,4 +1,5 @@
 use crate::bot::utils::MessageExt;
+use crate::database::Gallery;
 use crate::*;
 use cached::proc_macro::cached;
 use once_cell::sync::Lazy;
@@ -31,7 +32,7 @@ pub enum RuaCommand {
     // 按评分高低查询一段时间内的本子，格式 /best 最少几天前 最多几天前 多少本
     Best([i64; 3]),
     // 用该命令回复一条画廊以上传其完整版本
-    Full,
+    Full(Gallery),
 }
 
 impl RuaCommand {
@@ -66,10 +67,19 @@ impl RuaCommand {
         match (cmd, is_admin) {
             ("ping", _) => Ok(Self::Ping),
             ("full", true) => {
-                if message.update.reply_to_gallery().is_none() {
-                    return Err(WrongCommand("用法：请回复一个需要上传的画廊"));
+                let arg = if !args.is_empty() {
+                    args.split('/')
+                        .last()
+                        .and_then(|s| s.parse::<i32>().ok())
+                        .and_then(|id| DB.query_gallery_by_message_id(id).ok())
+                } else {
+                    None
+                };
+                let gallery = message.update.reply_to_gallery().or(arg);
+                match gallery {
+                    Some(v) => Ok(Self::Full(v)),
+                    _ => Err(WrongCommand("用法：请回复一个需要上传的画廊")),
                 }
-                Ok(Self::Full)
             }
             ("delete", true) => {
                 if message.update.reply_to_gallery().is_none() {

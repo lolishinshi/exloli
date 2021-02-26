@@ -1,5 +1,6 @@
 use super::utils::*;
 use crate::bot::command::*;
+use crate::database::Gallery;
 use crate::utils::get_message_url;
 use crate::*;
 use anyhow::{Context, Result};
@@ -56,15 +57,13 @@ async fn delete_gallery(message: &Update) -> Result<Message> {
     ))?)
 }
 
-async fn full_gallery(message: &Update) -> Result<Message> {
+async fn full_gallery(message: &Update, gallery: Gallery) -> Result<Message> {
     info!("执行：/full");
     let reply_message =
         send!(message.reply_to("收到命令，将更新该画廊的完整版本……"))?.to_chat_or_inline_message();
 
-    let gallery = message.update.reply_to_gallery().context("找不到回复")?;
-
     let mut text = "更新完毕".to_owned();
-    if let Err(e) = EXLOLI.upload_gallery_by_url(&gallery.get_url()).await {
+    if let Err(e) = EXLOLI.full_gallery_by_url(&gallery.get_url()).await {
         error!("上传出错：{}", e);
         text = format!("更新失败：{}", e);
     }
@@ -150,8 +149,8 @@ async fn message_handler(message: Update) -> Result<()> {
             to_delete.push(send!(message.reply_to("pong"))?.id);
             to_delete.push(message.update.id);
         }
-        Ok(Full) => {
-            to_delete.push(full_gallery(&message).await?.id);
+        Ok(Full(g)) => {
+            to_delete.push(full_gallery(&message, g).await?.id);
             to_delete.push(message.update.id);
         }
         Ok(Delete) => {

@@ -80,6 +80,14 @@ impl ExLoli {
         self.upload_gallery(gallery).await
     }
 
+    /// 更新指定 URL 的画廊
+    pub async fn full_gallery_by_url(&self, url: &str) -> Result<()> {
+        let mut gallery = self.exhentai.get_gallery_by_url(url).await?;
+        gallery.limit = false;
+        gallery.update = true;
+        self.upload_gallery(gallery).await
+    }
+
     /// 将画廊上传到 telegram
     async fn upload_gallery<'a>(&'a self, basic_info: BasicGalleryInfo<'a>) -> Result<()> {
         info!("上传中，画廊名称: {}", basic_info.title);
@@ -87,34 +95,38 @@ impl ExLoli {
         let mut gallery = basic_info.clone().into_full_info().await?;
 
         // 判断是否上传过并且不需要更新
-        let (need_update, old_gallery) = match DB.query_gallery_by_title(&gallery.title) {
-            Ok(g) => {
-                // 上传量已经达到限制的，不做更新
-                if g.upload_images as usize == CONFIG.exhentai.max_img_cnt && gallery.limit {
-                    return Err(anyhow::anyhow!("AlreadyUpload"));
+        let (need_update, old_gallery) = if basic_info.update {
+            (true, Some(DB.query_gallery_by_url(&basic_info.url)?))
+        } else {
+            match DB.query_gallery_by_title(&gallery.title) {
+                Ok(g) => {
+                    // 上传量已经达到限制的，不做更新
+                    if g.upload_images as usize == CONFIG.exhentai.max_img_cnt && gallery.limit {
+                        return Err(anyhow::anyhow!("AlreadyUpload"));
+                    }
+                    // 如果已上传所有图片，则只更新 tag
+                    if gallery.img_pages.len() == g.upload_images as usize {
+                        return Err(anyhow::anyhow!(
+                            "该画廊已存在：{}",
+                            get_message_url(g.message_id)
+                        ));
+                    }
+                    // FIXME: 当前判断方法可能会误判，而且修改最大图片数量以后会失效
+                    // 如果曾经更新过完整版，则继续上传完整版
+                    if g.upload_images as usize > CONFIG.exhentai.max_img_cnt {
+                        gallery.limit = false;
+                    }
+                    // 七天以内上传过的，不重复发，在原消息的基础上更新
+                    if g.publish_date + Duration::days(7) > Utc::today().naive_utc() {
+                        info!("找到历史上传：{}", g.message_id);
+                        (true, Some(g))
+                    } else {
+                        info!("历史上传已过期：{}", g.message_id);
+                        (false, Some(g))
+                    }
                 }
-                // 如果已上传所有图片，则只更新 tag
-                if gallery.img_pages.len() == g.upload_images as usize {
-                    return Err(anyhow::anyhow!(
-                        "该画廊已存在：{}",
-                        get_message_url(g.message_id)
-                    ));
-                }
-                // FIXME: 当前判断方法可能会误判，而且修改最大图片数量以后会失效
-                // 如果曾经更新过完整版，则继续上传完整版
-                if g.upload_images as usize > CONFIG.exhentai.max_img_cnt {
-                    gallery.limit = false;
-                }
-                // 七天以内上传过的，不重复发，在原消息的基础上更新
-                if g.publish_date + Duration::days(7) > Utc::today().naive_utc() {
-                    info!("找到历史上传：{}", g.message_id);
-                    (true, Some(g))
-                } else {
-                    info!("历史上传已过期：{}", g.message_id);
-                    (false, Some(g))
-                }
+                _ => (false, None),
             }
-            _ => (false, None),
         };
 
         let img_urls = gallery.upload_images_to_telegraph().await?;
