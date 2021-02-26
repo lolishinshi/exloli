@@ -81,10 +81,10 @@ impl ExLoli {
     }
 
     /// 将画廊上传到 telegram
-    async fn upload_gallery<'a>(&'a self, gallery: BasicGalleryInfo<'a>) -> Result<()> {
-        info!("上传中，画廊名称: {}", gallery.title);
+    async fn upload_gallery<'a>(&'a self, basic_info: BasicGalleryInfo<'a>) -> Result<()> {
+        info!("上传中，画廊名称: {}", basic_info.title);
 
-        let mut gallery = gallery.into_full_info().await?;
+        let mut gallery = basic_info.clone().into_full_info().await?;
 
         // 判断是否上传过并且不需要更新
         let (need_update, old_gallery) = match DB.query_gallery_by_title(&gallery.title) {
@@ -92,6 +92,13 @@ impl ExLoli {
                 // 上传量已经达到限制的，不做更新
                 if g.upload_images as usize == CONFIG.exhentai.max_img_cnt && gallery.limit {
                     return Err(anyhow::anyhow!("AlreadyUpload"));
+                }
+                // 如果已上传所有图片，则只更新 tag
+                if gallery.img_pages.len() == g.upload_images as usize {
+                    return Err(anyhow::anyhow!(
+                        "该画廊已存在：{}",
+                        get_message_url(g.message_id)
+                    ));
                 }
                 // FIXME: 当前判断方法可能会误判，而且修改最大图片数量以后会失效
                 // 如果曾经更新过完整版，则继续上传完整版
@@ -127,6 +134,10 @@ impl ExLoli {
             )
             .await?;
         info!("文章地址: {}", page.url);
+
+        // 画廊上传完毕后不需要保留图片缓存
+        // 因为即使画廊更新了，也会创建一个新画廊，无法利用到以前的缓存
+        DB.clear_cache_by_url(&gallery.url)?;
 
         match (need_update, old_gallery) {
             // 需要原地更新的旧本子，直接编辑原来的消息

@@ -193,6 +193,15 @@ impl DataBase {
             .filter(gallery::message_id.eq(message_id))
             .get_result::<Gallery>(&self.pool.get()?)?)
     }
+
+    /// 清除指定画廊的缓存
+    pub fn clear_cache_by_url(&self, url: &str) -> Result<()> {
+        let (id, _) = get_id_from_gallery(url);
+        diesel::delete(images::table)
+            .filter(images::gallery_id.eq(id))
+            .execute(&self.pool.get()?)?;
+        Ok(())
+    }
 }
 
 impl Gallery {

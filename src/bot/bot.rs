@@ -1,5 +1,6 @@
 use super::utils::*;
 use crate::bot::command::*;
+use crate::utils::get_message_url;
 use crate::*;
 use anyhow::{Context, Result};
 use chrono::{Duration, Utc};
@@ -83,17 +84,27 @@ async fn query_best(message: &Update, from: i64, to: i64, cnt: i64) -> Result<()
             .iter()
             .map(|g| {
                 format!(
-                    r#"<a href="https://t.me/{}/{}">{:.2} - {}</a>"#,
-                    CONFIG.telegram.channel_id, g.message_id, g.score, g.title
+                    r#"<a href="{}">{:.2} - {}</a>"#,
+                    get_message_url(g.message_id),
+                    g.score,
+                    g.title
                 )
-                .replace("/-100", "/")
-                .replace("@", "")
             })
             .collect::<Vec<_>>()
             .join("\n"),
     );
     send!(message.reply_to(text))?;
     Ok(())
+}
+
+async fn query_gallery(message: &Update, url: &str) -> Result<Option<Message>> {
+    match DB.query_gallery_by_url(url) {
+        Ok(g) => {
+            send!(message.reply_to(get_message_url(g.message_id)))?;
+            Ok(None)
+        }
+        _ => Ok(Some(send!(message.reply_to("未找到！"))?)),
+    }
 }
 
 /// 判断是否是新本子的发布信息
@@ -150,6 +161,11 @@ async fn message_handler(message: Update) -> Result<()> {
         Ok(Upload(url)) => {
             to_delete.push(upload_gallery(&message, &url).await?.id);
             to_delete.push(message.update.id);
+        }
+        Ok(Query(url)) => {
+            if let Some(m) = query_gallery(&message, &url).await? {
+                to_delete.push(m.id);
+            }
         }
         Ok(Best([from, to, cnt])) => query_best(&message, from, to, cnt).await?,
         _ => {}

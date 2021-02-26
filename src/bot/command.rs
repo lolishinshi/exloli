@@ -1,11 +1,15 @@
 use crate::bot::utils::MessageExt;
 use crate::*;
 use cached::proc_macro::cached;
+use once_cell::sync::Lazy;
 use std::convert::TryInto;
 use std::str::FromStr;
 use teloxide::prelude::UpdateWithCx;
 use teloxide::types::{Message, User};
 use tokio::task::block_in_place;
+
+static EXHENTAI_URL: Lazy<regex::Regex> =
+    Lazy::new(|| regex::Regex::new("https://e.hentai.org/\\w+/\\w+/?").unwrap());
 
 pub enum CommandError {
     /// 命令解析错误
@@ -18,6 +22,8 @@ pub enum CommandError {
 pub enum RuaCommand {
     // 上传指定画廊
     Upload(String),
+    // 查询指定画廊
+    Query(String),
     // Ping bot
     Ping,
     // 用该命令回复一条画廊以将其删除
@@ -73,7 +79,7 @@ impl RuaCommand {
             }
             ("upload", true) => {
                 // TODO: bool to option?
-                if args.is_empty() {
+                if !EXHENTAI_URL.is_match(message.update.text().unwrap_or_default()) {
                     Err(WrongCommand("用法：/upload 画廊地址"))
                 } else {
                     Ok(Self::Upload(args.to_owned()))
@@ -88,6 +94,13 @@ impl RuaCommand {
                 }
                 _ => Err(WrongCommand("用法：/best 起始时间 终止时间 最大数量")),
             },
+            ("query", _) => {
+                if !EXHENTAI_URL.is_match(message.update.text().unwrap_or_default()) {
+                    Err(WrongCommand("用法：/query 画廊地址"))
+                } else {
+                    Ok(Self::Query(args.to_owned()))
+                }
+            }
             _ => {
                 if bot == bot_id {
                     Err(WrongCommand(""))

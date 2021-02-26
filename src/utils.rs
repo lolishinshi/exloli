@@ -1,4 +1,5 @@
 use crate::trans::TRANS;
+use crate::CONFIG;
 use std::borrow::Cow;
 use std::str::FromStr;
 
@@ -70,4 +71,11 @@ pub fn get_id_from_image(url: &str) -> (i32, i32) {
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
     (ids[0], ids[1])
+}
+
+/// 根据消息 id 生成当前频道的消息直链
+pub fn get_message_url(id: i32) -> String {
+    format!("https://t.me/{}/{}", CONFIG.telegram.channel_id, id)
+        .replace("/-100", "/")
+        .replace("@", "")
 }

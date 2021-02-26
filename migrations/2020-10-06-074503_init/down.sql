@@ -2,4 +2,3 @@
 
 DROP TABLE gallery;
 DROP TABLE images;
-DROP TABLE users;

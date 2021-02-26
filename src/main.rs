@@ -19,7 +19,6 @@ use teloxide::types::ParseMode;
 use tokio::time::delay_for;
 
 use std::env;
-use std::path::Path;
 use std::str::FromStr;
 use std::time;
 
@@ -77,11 +76,9 @@ async fn run() -> Result<(), Error> {
         return Ok(());
     }
 
-    let db_path = env::var("DATABASE_URL").expect("请设置 DATABASE_URL");
-    if !Path::new(&db_path).exists() {
-        info!("初始化数据库");
-        DB.init_database()?;
-    }
+    env::var("DATABASE_URL").expect("请设置 DATABASE_URL");
+    info!("初始化数据库");
+    DB.init_database()?;
 
     let debug = matches.opt_present("debug");
 
