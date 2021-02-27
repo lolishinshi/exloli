@@ -55,7 +55,7 @@ pub struct BasicGalleryInfo<'a> {
     pub url: String,
     /// 是否限制图片数量
     pub limit: bool,
-    /// 这是否是一次更新操作，即永远不发布新消息s
+    /// 这是否是一次更新操作，即永远不发布新消息
     pub update: bool,
 }
 

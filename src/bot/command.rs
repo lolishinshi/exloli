@@ -1,13 +1,11 @@
-use crate::bot::utils::MessageExt;
+use crate::bot::utils::{check_is_channel_admin, MessageExt};
 use crate::database::Gallery;
 use crate::*;
-use cached::proc_macro::cached;
 use once_cell::sync::Lazy;
 use std::convert::TryInto;
 use std::str::FromStr;
 use teloxide::prelude::UpdateWithCx;
-use teloxide::types::{Message, User};
-use tokio::task::block_in_place;
+use teloxide::types::Message;
 
 static EXHENTAI_URL: Lazy<regex::Regex> =
     Lazy::new(|| regex::Regex::new("https://e.hentai.org/\\w+/\\w+/?").unwrap());
@@ -133,34 +131,4 @@ fn parse_command_best(input: &str) -> Option<[i64; 3]> {
         return Some(v);
     }
     None
-}
-
-/// 获取管理员列表，提供 1 个小时的缓存
-#[cached(time = 3600)]
-async fn get_admins() -> Vec<User> {
-    let mut admins =
-        send!(BOT.get_chat_administrators(CONFIG.telegram.channel_id.clone())).unwrap_or_default();
-    admins.extend(
-        send!(BOT.get_chat_administrators(CONFIG.telegram.group_id.clone())).unwrap_or_default(),
-    );
-    admins.into_iter().map(|member| member.user).collect()
-}
-
-// 检测是否是指定频道的管理员
-fn check_is_channel_admin(message: &UpdateWithCx<Message>) -> bool {
-    // 先检测是否为匿名管理员
-    let from_user = message.update.from();
-    if from_user
-        .map(|u| u.username == Some("GroupAnonymousBot".into()))
-        .unwrap_or(false)
-        && message.update.is_from_my_group()
-    {
-        return true;
-    }
-    let admins = block_in_place(|| futures::executor::block_on(get_admins()));
-    message
-        .update
-        .from()
-        .map(|user| admins.iter().map(|admin| admin == user).any(|x| x))
-        .unwrap_or(false)
 }

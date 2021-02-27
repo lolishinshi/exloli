@@ -33,7 +33,7 @@ async fn upload_gallery(message: &Update, url: &str) -> Result<Message> {
     info!("执行：/upload {}", url);
     let reply_message = send!(message.reply_to("收到命令，上传中……"))?.to_chat_or_inline_message();
     let mut text = "上传完毕".to_owned();
-    if let Err(e) = EXLOLI.upload_gallery_by_url(&url).await {
+    if let Err(e) = EXLOLI.upload_gallery_by_url(&url, false).await {
         error!("上传出错：{}", e);
         text = format!("上传失败：{}", e);
     }
@@ -57,20 +57,20 @@ async fn delete_gallery(message: &Update) -> Result<Message> {
     ))?)
 }
 
-async fn full_gallery(message: &Update, gallery: Gallery) -> Result<Message> {
+async fn full_gallery(message: &Update, gallery: &Gallery) -> Result<Message> {
     info!("执行：/full");
     let reply_message =
         send!(message.reply_to("收到命令，将更新该画廊的完整版本……"))?.to_chat_or_inline_message();
 
     let mut text = "更新完毕".to_owned();
-    if let Err(e) = EXLOLI.full_gallery_by_url(&gallery.get_url()).await {
+    if let Err(e) = EXLOLI.upload_gallery_by_url(&gallery.get_url(), true).await {
         error!("上传出错：{}", e);
         text = format!("更新失败：{}", e);
     }
     Ok(send!(message.bot.edit_message_text(reply_message, text))?)
 }
 
-async fn query_best(message: &Update, from: i64, to: i64, cnt: i64) -> Result<()> {
+async fn query_best(message: &Update, from: i64, to: i64, cnt: i64) -> Result<Message> {
     info!("执行：/best {} {} {}", from, to, cnt);
     let (from_d, to_d) = (
         Utc::today().naive_utc() - Duration::days(from),
@@ -92,10 +92,10 @@ async fn query_best(message: &Update, from: i64, to: i64, cnt: i64) -> Result<()
             .collect::<Vec<_>>()
             .join("\n"),
     );
-    send!(message.reply_to(text))?;
-    Ok(())
+    Ok(send!(message.reply_to(text))?)
 }
 
+/// 查询画廊，若失败则返回失败消息，成功则直接发送
 async fn query_gallery(message: &Update, url: &str) -> Result<Option<Message>> {
     match DB.query_gallery_by_url(url) {
         Ok(g) => {
@@ -134,43 +134,45 @@ async fn message_handler(message: Update) -> Result<()> {
     }
 
     // 其他命令
-    let mut to_delete = vec![];
-    match RuaCommand::parse(&message, &CONFIG.telegram.bot_id) {
+    let mut to_delete = vec![message.update.id];
+    let cmd = RuaCommand::parse(&message, &CONFIG.telegram.bot_id);
+    match &cmd {
         Err(CommandError::WrongCommand(help)) => {
             info!("错误的命令：{}", help);
             if !help.is_empty() {
-                to_delete.push(send!(message.reply_to(help))?.id);
-                to_delete.push(message.update.id);
+                to_delete.push(send!(message.reply_to(*help))?.id);
             } else {
                 send!(message.delete_message())?;
             }
         }
         Ok(Ping) => {
             to_delete.push(send!(message.reply_to("pong"))?.id);
-            to_delete.push(message.update.id);
         }
         Ok(Full(g)) => {
             to_delete.push(full_gallery(&message, g).await?.id);
-            to_delete.push(message.update.id);
         }
         Ok(Delete) => {
             to_delete.push(delete_gallery(&message).await?.id);
-            to_delete.push(message.update.id);
         }
         Ok(Upload(url)) => {
-            to_delete.push(upload_gallery(&message, &url).await?.id);
-            to_delete.push(message.update.id);
+            to_delete.push(upload_gallery(&message, url.as_str()).await?.id);
         }
         Ok(Query(url)) => {
-            if let Some(m) = query_gallery(&message, &url).await? {
-                to_delete.push(m.id);
-            }
+            query_gallery(&message, url.as_str()).await?;
         }
-        Ok(Best([from, to, cnt])) => query_best(&message, from, to, cnt).await?,
-        _ => {}
+        Ok(Best([from, to, cnt])) => {
+            query_best(&message, *from, *to, *cnt).await?;
+        }
+        // 收到无效命令则立即返回
+        _ => return Ok(()),
     }
 
-    // 群组内的消息
+    // 对 query 和 best 命令的调用保留
+    if matches!(cmd, Ok(Query(_)) | Ok(Best(_))) && check_is_channel_admin(&message) {
+        to_delete.clear();
+    }
+
+    // 定时删除群组内的 BOT 消息
     if !to_delete.is_empty() && message.update.is_from_my_group() {
         let chat_id = message.chat_id();
         tokio::spawn(async move {

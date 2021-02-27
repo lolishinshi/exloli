@@ -74,17 +74,10 @@ impl ExLoli {
     }
 
     /// 上传指定 URL 的画廊
-    pub async fn upload_gallery_by_url(&self, url: &str) -> Result<()> {
+    pub async fn upload_gallery_by_url(&self, url: &str, update: bool) -> Result<()> {
         let mut gallery = self.exhentai.get_gallery_by_url(url).await?;
         gallery.limit = false;
-        self.upload_gallery(gallery).await
-    }
-
-    /// 更新指定 URL 的画廊
-    pub async fn full_gallery_by_url(&self, url: &str) -> Result<()> {
-        let mut gallery = self.exhentai.get_gallery_by_url(url).await?;
-        gallery.limit = false;
-        gallery.update = true;
+        gallery.update = update;
         self.upload_gallery(gallery).await
     }
 
@@ -95,7 +88,7 @@ impl ExLoli {
         let mut gallery = basic_info.clone().into_full_info().await?;
 
         // 判断是否上传过并且不需要更新
-        let (need_update, old_gallery) = if basic_info.update {
+        let (update_in_place, old_gallery) = if basic_info.update {
             (true, Some(DB.query_gallery_by_url(&basic_info.url)?))
         } else {
             match DB.query_gallery_by_title(&gallery.title) {
@@ -104,7 +97,8 @@ impl ExLoli {
                     if g.upload_images as usize == CONFIG.exhentai.max_img_cnt && gallery.limit {
                         return Err(anyhow::anyhow!("AlreadyUpload"));
                     }
-                    // 如果已上传所有图片，则只更新 tag
+                    // FIXME: 如果只是修改而不是增加了图片的画廊会被认为重复而不进行更新
+                    // 如果已上传所有图片，则不进行更新
                     if gallery.img_pages.len() == g.upload_images as usize {
                         return Err(anyhow::anyhow!(
                             "该画廊已存在：{}",
@@ -133,25 +127,19 @@ impl ExLoli {
 
         // 上传到 telegraph
         let title = gallery.title_jp.as_ref().unwrap_or(&gallery.title);
-        let page = self
-            .publish_to_telegraph(
-                title,
-                &img_urls,
-                gallery.img_pages.len(),
-                if !need_update {
-                    old_gallery.as_ref().map(|v| v.upload_images as usize)
-                } else {
-                    None
-                },
-            )
-            .await?;
+        let content = Self::get_article_string(
+            &img_urls,
+            gallery.img_pages.len(),
+            if !update_in_place {
+                old_gallery.as_ref().map(|v| v.upload_images as usize)
+            } else {
+                None
+            },
+        );
+        let page = self.publish_to_telegraph(title, &content).await?;
         info!("文章地址: {}", page.url);
 
-        // 画廊上传完毕后不需要保留图片缓存
-        // 因为即使画廊更新了，也会创建一个新画廊，无法利用到以前的缓存
-        DB.clear_cache_by_url(&gallery.url)?;
-
-        match (need_update, old_gallery) {
+        match (update_in_place, old_gallery) {
             // 需要原地更新的旧本子，直接编辑原来的消息
             (true, Some(g)) => self.update_message(&g, &gallery, &page.url).await,
             // 不需要原地更新的旧本子，发布新消息
@@ -199,30 +187,8 @@ impl ExLoli {
     }
 
     /// 将画廊内容上传至 telegraph
-    async fn publish_to_telegraph<'a>(
-        &self,
-        title: &str,
-        uploaded_urls: &[String],
-        total_urls_cnt: usize,
-        last_urls_cnt: Option<usize>,
-    ) -> Result<Page> {
+    async fn publish_to_telegraph<'a>(&self, title: &str, content: &str) -> Result<Page> {
         info!("上传到 Telegraph");
-        let mut content = img_urls_to_html(&uploaded_urls);
-        if last_urls_cnt.is_some() || uploaded_urls.len() != total_urls_cnt {
-            content.push_str("<p>");
-            content.push_str(&format!(
-                "已上传 {}/{}",
-                uploaded_urls.len(),
-                total_urls_cnt,
-            ));
-            if let Some(v) = last_urls_cnt {
-                content.push_str(&format!("，上次上传到 {}", v));
-            }
-            if uploaded_urls.len() != total_urls_cnt {
-                content.push_str("，完整版请前往 E 站观看");
-            }
-            content.push_str("</p>");
-        }
         self.telegraph
             .create_page(title, &html_to_node(&content), false)
             .await
@@ -258,5 +224,26 @@ impl ExLoli {
         ));
         tags.push_str(&format!("\n<code>原始地址</code>: {}", gallery.url));
         tags
+    }
+
+    /// 生成 telegraph 文章内容
+    fn get_article_string(
+        image_urls: &[String],
+        total_image: usize,
+        last_uploaded: Option<usize>,
+    ) -> String {
+        let mut content = img_urls_to_html(&image_urls);
+        if last_uploaded.is_some() || image_urls.len() != total_image {
+            content.push_str("<p>");
+            content.push_str(&format!("已上传 {}/{}", image_urls.len(), total_image,));
+            if let Some(v) = last_uploaded {
+                content.push_str(&format!("，上次上传到 {}", v));
+            }
+            if image_urls.len() != total_image {
+                content.push_str("，完整版请前往 E 站观看");
+            }
+            content.push_str("</p>");
+        }
+        content
     }
 }
