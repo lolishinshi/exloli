@@ -28,6 +28,7 @@ tokio = { version = "0.2.22", features = ["time", "rt-threaded", "macros"] }
 futures = "0.3.5"
 unicode-width = "0.1.8"
 regex = "1.4.3"
+uuid = { version = "0.8", features = ["v3"] }
 
 # 日志
 log = "0.4.11"

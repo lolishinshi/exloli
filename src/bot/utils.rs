@@ -1,9 +1,14 @@
 use crate::database::Gallery;
 use crate::{BOT, CONFIG, DB};
 use cached::proc_macro::cached;
+use once_cell::sync::Lazy;
 use teloxide::prelude::*;
 use teloxide::types::*;
 use tokio::task::block_in_place;
+use uuid::Uuid;
+
+pub static EXHENTAI_URL: Lazy<regex::Regex> =
+    Lazy::new(|| regex::Regex::new(r"https://e.hentai\.org/g/\d+/[0-9a-f]+/?").unwrap());
 
 #[macro_export]
 macro_rules! send {
@@ -85,4 +90,21 @@ pub fn check_is_channel_admin(message: &UpdateWithCx<Message>) -> bool {
         .from()
         .map(|user| admins.iter().map(|admin| admin == user).any(|x| x))
         .unwrap_or(false)
+}
+
+pub fn inline_article<S1, S2>(title: S1, content: S2) -> InlineQueryResultArticle
+where
+    S1: Into<String>,
+    S2: Into<String>,
+{
+    let content = content.into();
+    let uuid = Uuid::new_v3(
+        &Uuid::from_bytes(b"EXLOLIINLINEQURY".to_owned()),
+        content.as_bytes(),
+    );
+    InlineQueryResultArticle::new(
+        uuid.to_string(),
+        title.into(),
+        InputMessageContent::Text(InputMessageContentText::new(content)),
+    )
 }

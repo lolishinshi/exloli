@@ -1,14 +1,10 @@
-use crate::bot::utils::{check_is_channel_admin, MessageExt};
+use crate::bot::utils::*;
 use crate::database::Gallery;
 use crate::*;
-use once_cell::sync::Lazy;
 use std::convert::TryInto;
 use std::str::FromStr;
 use teloxide::prelude::UpdateWithCx;
 use teloxide::types::Message;
-
-static EXHENTAI_URL: Lazy<regex::Regex> =
-    Lazy::new(|| regex::Regex::new(r"https://e.hentai\.org/g/\d+/[0-9a-f]+/?").unwrap());
 
 pub enum CommandError {
     /// 命令解析错误

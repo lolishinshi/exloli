@@ -33,12 +33,13 @@ async fn upload_gallery(message: &Update, urls: &[String]) -> Result<Message> {
     info!("执行：/upload {:?}", urls);
     let mut text = "收到命令，上传中……".to_owned();
     let mut reply_message = send!(message.reply_to(&text))?.to_chat_or_inline_message();
-    for (idx, url) in urls.into_iter().enumerate() {
+    for (idx, url) in urls.iter().enumerate() {
         match EXLOLI.upload_gallery_by_url(&url, false).await {
             Ok(_) => text.push_str(&format!("\n第 {} 本 - 上传成功", idx + 1)),
             Err(e) => text.push_str(&format!("\n第 {} 本 - 上传失败：{}", idx + 1, e)),
         }
-        reply_message = send!(message.bot.edit_message_text(reply_message, &text))?.to_chat_or_inline_message();
+        reply_message =
+            send!(message.bot.edit_message_text(reply_message, &text))?.to_chat_or_inline_message();
     }
     text.push_str("\n上传完毕！");
     Ok(send!(message.bot.edit_message_text(reply_message, text))?)
@@ -202,6 +203,26 @@ async fn poll_handler(poll: UpdateWithCx<Poll>) -> Result<()> {
     DB.update_score(&poll.update.id, score)
 }
 
+async fn inline_handler(query: UpdateWithCx<InlineQuery>) -> Result<()> {
+    let text = query.update.query.trim();
+    info!("行内查询：{}", text);
+    let mut answer = vec![];
+    if EXHENTAI_URL.is_match(text) {
+        if let Ok(v) = DB.query_gallery_by_url(&query.update.query) {
+            let url = get_message_url(v.message_id);
+            answer.push(InlineQueryResult::Article(inline_article(v.title, url)));
+        }
+    }
+    if answer.is_empty() {
+        answer.push(InlineQueryResult::Article(inline_article(
+            "未找到",
+            "没有找到",
+        )));
+    }
+    send!(query.bot.answer_inline_query(query.update.id, answer))?;
+    Ok(())
+}
+
 pub async fn start_bot() {
     info!("BOT 启动");
     Dispatcher::new(BOT.clone())
@@ -213,6 +234,11 @@ pub async fn start_bot() {
         .polls_handler(|rx: DispatcherHandlerRx<Poll>| {
             rx.for_each_concurrent(8, |message| async {
                 poll_handler(message).await.log_on_error().await;
+            })
+        })
+        .inline_queries_handler(|rx: DispatcherHandlerRx<InlineQuery>| {
+            rx.for_each_concurrent(8, |message| async {
+                inline_handler(message).await.log_on_error().await;
             })
         })
         .dispatch()
