@@ -8,7 +8,7 @@ use teloxide::prelude::UpdateWithCx;
 use teloxide::types::Message;
 
 static EXHENTAI_URL: Lazy<regex::Regex> =
-    Lazy::new(|| regex::Regex::new("https://e.hentai.org/\\w+/\\w+/?").unwrap());
+    Lazy::new(|| regex::Regex::new(r"https://e.hentai\.org/g/\d+/[0-9a-f]+/?").unwrap());
 
 pub enum CommandError {
     /// 命令解析错误
@@ -20,7 +20,7 @@ pub enum CommandError {
 #[derive(PartialEq, Debug)]
 pub enum RuaCommand {
     // 上传指定画廊
-    Upload(String),
+    Upload(Vec<String>),
     // 查询指定画廊
     Query(String),
     // Ping bot
@@ -45,7 +45,7 @@ impl RuaCommand {
         }
 
         // TODO: split_once
-        let (cmd, args) = match text.find(' ') {
+        let (cmd, args) = match text.find(|c| c == ' ' || c == '\n') {
             Some(pos) => (&text[1..pos], text[pos + 1..].trim()),
             _ => (&text[1..], ""),
         };
@@ -86,11 +86,14 @@ impl RuaCommand {
                 Ok(Self::Delete)
             }
             ("upload", true) => {
-                // TODO: bool to option?
-                if !EXHENTAI_URL.is_match(message.update.text().unwrap_or_default()) {
+                let urls = EXHENTAI_URL
+                    .captures_iter(message.update.text().unwrap_or_default())
+                    .filter_map(|c| c.get(0).map(|m| m.as_str().to_owned()))
+                    .collect::<Vec<_>>();
+                if urls.is_empty() {
                     Err(WrongCommand("用法：/upload 画廊地址"))
                 } else {
-                    Ok(Self::Upload(args.to_owned()))
+                    Ok(Self::Upload(urls))
                 }
             }
             ("best", _) => match parse_command_best(args) {

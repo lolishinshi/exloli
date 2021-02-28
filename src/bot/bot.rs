@@ -29,14 +29,18 @@ async fn send_pool(message: &Update) -> Result<()> {
 }
 
 /// 响应 /upload 命令，根据 url 上传指定画廊
-async fn upload_gallery(message: &Update, url: &str) -> Result<Message> {
-    info!("执行：/upload {}", url);
-    let reply_message = send!(message.reply_to("收到命令，上传中……"))?.to_chat_or_inline_message();
-    let mut text = "上传完毕".to_owned();
-    if let Err(e) = EXLOLI.upload_gallery_by_url(&url, false).await {
-        error!("上传出错：{}", e);
-        text = format!("上传失败：{}", e);
+async fn upload_gallery(message: &Update, urls: &[String]) -> Result<Message> {
+    info!("执行：/upload {:?}", urls);
+    let mut text = "收到命令，上传中……".to_owned();
+    let mut reply_message = send!(message.reply_to(&text))?.to_chat_or_inline_message();
+    for (idx, url) in urls.into_iter().enumerate() {
+        match EXLOLI.upload_gallery_by_url(&url, false).await {
+            Ok(_) => text.push_str(&format!("\n第 {} 本 - 上传成功", idx + 1)),
+            Err(e) => text.push_str(&format!("\n第 {} 本 - 上传失败：{}", idx + 1, e)),
+        }
+        reply_message = send!(message.bot.edit_message_text(reply_message, &text))?.to_chat_or_inline_message();
     }
+    text.push_str("\n上传完毕！");
     Ok(send!(message.bot.edit_message_text(reply_message, text))?)
 }
 
@@ -154,8 +158,8 @@ async fn message_handler(message: Update) -> Result<()> {
         Ok(Delete) => {
             to_delete.push(delete_gallery(&message).await?.id);
         }
-        Ok(Upload(url)) => {
-            to_delete.push(upload_gallery(&message, url.as_str()).await?.id);
+        Ok(Upload(urls)) => {
+            to_delete.push(upload_gallery(&message, urls).await?.id);
         }
         Ok(Query(url)) => {
             query_gallery(&message, url.as_str()).await?;
