@@ -7,7 +7,7 @@ use reqwest::header::{self, HeaderMap, HeaderValue};
 use reqwest::{redirect::Policy, Client, Proxy, Response};
 use telegraph_rs::Telegraph;
 use tempfile::NamedTempFile;
-use tokio::time::delay_for;
+use tokio::time::sleep;
 
 use once_cell::sync::Lazy;
 use std::io::Write;
@@ -194,7 +194,7 @@ impl<'a> FullGalleryInfo<'a> {
                         error!("获取图片地址失败：{}", e);
                     }
                 }
-                delay_for(Duration::from_secs(10)).await;
+                sleep(Duration::from_secs(10)).await;
             }
             Err(format_err!("无法获图片地址"))
         };
@@ -229,7 +229,7 @@ impl<'a> FullGalleryInfo<'a> {
 
         debug!("下载图片中：{}", &url);
         // TODO: 是否有必要创建新的 client？
-        let client = Client::builder().timeout(Duration::from_secs(15)).build()?;
+        let client = Client::builder().timeout(Duration::from_secs(30)).build()?;
         let bytes = client.get(&url).send().and_then(Response::bytes).await?;
         let mut tmp = NamedTempFile::new()?;
         tmp.write_all(bytes.as_ref())?;

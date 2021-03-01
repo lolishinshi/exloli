@@ -173,7 +173,7 @@ async fn message_handler(message: Update) -> Result<()> {
     }
 
     // 对 query 和 best 命令的调用保留
-    if matches!(cmd, Ok(Query(_)) | Ok(Best(_))) && check_is_channel_admin(&message) {
+    if matches!(cmd, Ok(Query(_)) | Ok(Best(_))) {
         to_delete.clear();
     }
 
@@ -181,7 +181,7 @@ async fn message_handler(message: Update) -> Result<()> {
     if !to_delete.is_empty() && message.update.is_from_my_group() {
         let chat_id = message.chat_id();
         tokio::spawn(async move {
-            delay_for(time::Duration::from_secs(60)).await;
+            sleep(time::Duration::from_secs(60)).await;
             for id in to_delete {
                 send!(BOT.delete_message(chat_id, id)).log_on_error().await;
             }

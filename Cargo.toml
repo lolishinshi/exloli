@@ -1,7 +1,7 @@
 [package]
 name = "exloli"
 description = "根据指定关键词从 E 站下载本子并上传到 telegraph 并发布到 Telegram 频道"
-version = "0.5.0"
+version = "0.5.2"
 authors = ["Aloxaf <aloxafx@gmail.com>"]
 edition = "2018"
 
@@ -10,10 +10,13 @@ edition = "2018"
 [dependencies]
 # 网络相关
 libxml = "0.2.15"
-reqwest = { version = "0.10.6", features = ["json", "cookies", "gzip", "socks"] }
+reqwest = { version = "0.11.1", features = ["json", "cookies", "gzip", "socks"] }
 tempfile = "3.1.0"
 v_htmlescape = "0.10.0"
 teloxide = "0.3.1"
+tokio = { version = "1.2.0", features = ["time", "rt-multi-thread", "macros"] }
+telegraph-rs = "0.5.0"
+futures = "0.3.5"
 
 # 配置文件解析
 toml = "0.5.6"
@@ -23,20 +26,19 @@ serde_json = "1.0.57"
 # 杂项
 anyhow = "1.0.31"
 once_cell = "1.5.2"
-telegraph-rs = "0.4.2"
-tokio = { version = "0.2.22", features = ["time", "rt-threaded", "macros"] }
-futures = "0.3.5"
 unicode-width = "0.1.8"
 regex = "1.4.3"
 uuid = { version = "0.8", features = ["v3"] }
-
-# 日志
-log = "0.4.11"
-env_logger = "0.7.1"
-sled = "0.34.4"
 getopts = "0.2.21"
 diesel = { version = "1.4.5", features = ["sqlite", "r2d2", "chrono"] }
 diesel_migrations = { version = "1.4.0", features = ["sqlite"] }
 dotenv = "0.15.0"
 chrono = "0.4.19"
 cached = "0.22.0"
+
+# 日志
+log = "0.4.11"
+env_logger = "0.7.1"
+
+[profile.release]
+lto = true
