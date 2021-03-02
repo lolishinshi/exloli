@@ -16,7 +16,7 @@ use futures::executor::block_on;
 use once_cell::sync::Lazy;
 use teloxide::prelude::*;
 use teloxide::types::ParseMode;
-use tokio::time::sleep;
+use tokio::time::delay_for;
 
 use std::env;
 use std::str::FromStr;
@@ -97,6 +97,6 @@ async fn run() -> Result<(), Error> {
             }
         }
         info!("休眠中，预计 {} 分钟后开始工作", CONFIG.interval / 60);
-        sleep(time::Duration::from_secs(CONFIG.interval)).await;
+        delay_for(time::Duration::from_secs(CONFIG.interval)).await;
     }
 }

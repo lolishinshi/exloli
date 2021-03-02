@@ -7,7 +7,7 @@ use reqwest::header::{self, HeaderMap, HeaderValue};
 use reqwest::{redirect::Policy, Client, Proxy, Response};
 use telegraph_rs::Telegraph;
 use tempfile::NamedTempFile;
-use tokio::time::sleep;
+use tokio::time::delay_for;
 
 use once_cell::sync::Lazy;
 use std::io::Write;
@@ -194,7 +194,7 @@ impl<'a> FullGalleryInfo<'a> {
                         error!("获取图片地址失败：{}", e);
                     }
                 }
-                sleep(Duration::from_secs(10)).await;
+                delay_for(Duration::from_secs(10)).await;
             }
             Err(format_err!("无法获图片地址"))
         };
