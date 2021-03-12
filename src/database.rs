@@ -106,7 +106,7 @@ impl DataBase {
         &self,
         old_gallery: &Gallery,
         info: &FullGalleryInfo,
-        telegraph: String,
+        telegraph: &str,
         message_id: i32,
     ) -> Result<()> {
         debug!("更新画廊数据");

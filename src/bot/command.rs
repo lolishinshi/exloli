@@ -27,6 +27,8 @@ pub enum RuaCommand {
     Best([i64; 3]),
     // 用该命令回复一条画廊以上传其完整版本
     Full(Gallery),
+    // 更新 tag
+    UpdateTag(Gallery),
 }
 
 impl RuaCommand {
@@ -61,14 +63,7 @@ impl RuaCommand {
         match (cmd, is_admin) {
             ("ping", _) => Ok(Self::Ping),
             ("full", true) => {
-                let arg = if !args.is_empty() {
-                    args.split('/')
-                        .last()
-                        .and_then(|s| s.parse::<i32>().ok())
-                        .and_then(|id| DB.query_gallery_by_message_id(id).ok())
-                } else {
-                    None
-                };
+                let arg = get_gallery(args);
                 let gallery = message.update.reply_to_gallery().or(arg);
                 match gallery {
                     Some(v) => Ok(Self::Full(v)),
@@ -87,6 +82,14 @@ impl RuaCommand {
                     Err(WrongCommand("用法：/upload 画廊地址"))
                 } else {
                     Ok(Self::Upload(urls))
+                }
+            }
+            ("update_tag", true) => {
+                let arg = get_gallery(args);
+                let gallery = message.update.reply_to_gallery().or(arg);
+                match gallery {
+                    Some(v) => Ok(Self::UpdateTag(v)),
+                    _ => Err(WrongCommand("用法：请回复一个需要上传的画廊")),
                 }
             }
             ("best", _) => match parse_command_best(args) {
@@ -136,4 +139,15 @@ fn get_exhentai_urls(s: &str) -> Vec<String> {
         .captures_iter(s)
         .filter_map(|c| c.get(0).map(|m| m.as_str().to_owned()))
         .collect::<Vec<_>>()
+}
+
+fn get_gallery(s: &str) -> Option<Gallery> {
+    if !s.is_empty() {
+        s.split('/')
+            .last()
+            .and_then(|s| s.parse::<i32>().ok())
+            .and_then(|id| DB.query_gallery_by_message_id(id).ok())
+    } else {
+        None
+    }
 }

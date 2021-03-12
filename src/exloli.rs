@@ -145,7 +145,7 @@ impl ExLoli {
             // 不需要原地更新的旧本子，发布新消息
             (false, Some(g)) => {
                 let message = self.publish_to_telegram(&gallery, &page.url).await?;
-                DB.update_gallery(&g, &gallery, page.url, message.id)
+                DB.update_gallery(&g, &gallery, &page.url, message.id)
             }
             // 新本子，直接发布
             (_, None) => {
@@ -153,6 +153,14 @@ impl ExLoli {
                 DB.insert_gallery(&gallery, page.url, message.id)
             }
         }
+    }
+
+    /// 更新 tag
+    pub async fn update_tag(&self, old_gallery: &Gallery) -> Result<()> {
+        let url = old_gallery.get_url();
+        let new_gallery = self.exhentai.get_gallery_by_url(&url).await?.into_full_info().await?;
+        self.update_message(&old_gallery, &new_gallery, &old_gallery.telegraph).await?;
+        DB.update_gallery(&old_gallery, &new_gallery, &old_gallery.telegraph, old_gallery.message_id)
     }
 
     /// 更新旧消息并同时更新数据库
@@ -177,11 +185,11 @@ impl ExLoli {
                 DB.update_gallery(
                     &old_gallery,
                     &gallery,
-                    article.to_owned(),
+                    article,
                     old_gallery.message_id,
                 )
             }
-            Ok(mes) => DB.update_gallery(&old_gallery, &gallery, article.to_owned(), mes.id),
+            Ok(mes) => DB.update_gallery(&old_gallery, &gallery, article, mes.id),
             Err(e) => Err(e.into()),
         }
     }

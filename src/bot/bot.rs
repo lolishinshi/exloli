@@ -75,6 +75,20 @@ async fn full_gallery(message: &Update, gallery: &Gallery) -> Result<Message> {
     Ok(send!(message.bot.edit_message_text(reply_message, text))?)
 }
 
+async fn update_tag(message: &Update, g: &Gallery) -> Result<()> {
+    info!("执行：/update_tag");
+    let reply_message =
+        send!(message.reply_to("收到命令，将更新该画廊的 tag……"))?.to_chat_or_inline_message();
+
+    let mut text = "更新完毕".to_owned();
+    if let Err(e) = EXLOLI.update_tag(g).await {
+        error!("更新出错：{}", e);
+        text = format!("更新失败：{}", e);
+    }
+    send!(message.bot.edit_message_text(reply_message, text))?;
+    Ok(())
+}
+
 async fn query_best(message: &Update, from: i64, to: i64, cnt: i64) -> Result<Message> {
     info!("执行：/best {} {} {}", from, to, cnt);
     let (from_d, to_d) = (
@@ -171,8 +185,11 @@ async fn message_handler(message: Update) -> Result<()> {
         Ok(Best([from, to, cnt])) => {
             query_best(&message, *from, *to, *cnt).await?;
         }
+        Ok(UpdateTag(g)) => {
+            update_tag(&message, g).await?;
+        }
         // 收到无效命令则立即返回
-        _ => return Ok(()),
+        Err(CommandError::NotACommand) => return Ok(()),
     }
 
     // 对 query 和 best 命令的调用保留
