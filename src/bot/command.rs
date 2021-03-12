@@ -18,7 +18,7 @@ pub enum RuaCommand {
     // 上传指定画廊
     Upload(Vec<String>),
     // 查询指定画廊
-    Query(String),
+    Query(Vec<String>),
     // Ping bot
     Ping,
     // 用该命令回复一条画廊以将其删除
@@ -82,10 +82,7 @@ impl RuaCommand {
                 Ok(Self::Delete)
             }
             ("upload", true) => {
-                let urls = EXHENTAI_URL
-                    .captures_iter(message.update.text().unwrap_or_default())
-                    .filter_map(|c| c.get(0).map(|m| m.as_str().to_owned()))
-                    .collect::<Vec<_>>();
+                let urls = get_exhentai_urls(message.update.text().unwrap_or_default());
                 if urls.is_empty() {
                     Err(WrongCommand("用法：/upload 画廊地址"))
                 } else {
@@ -102,10 +99,11 @@ impl RuaCommand {
                 _ => Err(WrongCommand("用法：/best 起始时间 终止时间 最大数量")),
             },
             ("query", _) => {
-                if !EXHENTAI_URL.is_match(message.update.text().unwrap_or_default()) {
+                let urls = get_exhentai_urls(message.update.text().unwrap_or_default());
+                if urls.is_empty() {
                     Err(WrongCommand("用法：/query 画廊地址"))
                 } else {
-                    Ok(Self::Query(args.to_owned()))
+                    Ok(Self::Query(urls))
                 }
             }
             _ => {
@@ -130,4 +128,12 @@ fn parse_command_best(input: &str) -> Option<[i64; 3]> {
         return Some(v);
     }
     None
+}
+
+/// 提取字符串中的 e 站地址
+fn get_exhentai_urls(s: &str) -> Vec<String> {
+    EXHENTAI_URL
+        .captures_iter(s)
+        .filter_map(|c| c.get(0).map(|m| m.as_str().to_owned()))
+        .collect::<Vec<_>>()
 }

@@ -101,14 +101,17 @@ async fn query_best(message: &Update, from: i64, to: i64, cnt: i64) -> Result<Me
 }
 
 /// 查询画廊，若失败则返回失败消息，成功则直接发送
-async fn query_gallery(message: &Update, url: &str) -> Result<Option<Message>> {
-    match DB.query_gallery_by_url(url) {
-        Ok(g) => {
-            send!(message.reply_to(get_message_url(g.message_id)))?;
-            Ok(None)
-        }
-        _ => Ok(Some(send!(message.reply_to("未找到！"))?)),
-    }
+async fn query_gallery(message: &Update, urls: &[String]) -> Result<Message> {
+    let text = urls
+        .iter()
+        .map(|url| {
+            DB.query_gallery_by_url(url)
+                .map(|g| get_message_url(g.message_id))
+                .unwrap_or_else(|_| "未找到！".to_owned())
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    Ok(send!(message.reply_to(text))?)
 }
 
 /// 判断是否是新本子的发布信息
@@ -162,8 +165,8 @@ async fn message_handler(message: Update) -> Result<()> {
         Ok(Upload(urls)) => {
             to_delete.push(upload_gallery(&message, urls).await?.id);
         }
-        Ok(Query(url)) => {
-            query_gallery(&message, url.as_str()).await?;
+        Ok(Query(urls)) => {
+            query_gallery(&message, urls).await?;
         }
         Ok(Best([from, to, cnt])) => {
             query_best(&message, *from, *to, *cnt).await?;
