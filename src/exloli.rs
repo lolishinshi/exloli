@@ -159,8 +159,19 @@ impl ExLoli {
     pub async fn update_tag(&self, old_gallery: &Gallery) -> Result<()> {
         let url = old_gallery.get_url();
         let new_gallery = self.exhentai.get_gallery_by_url(&url).await?.into_full_info().await?;
-        self.update_message(&old_gallery, &new_gallery, &old_gallery.telegraph).await?;
-        DB.update_gallery(&old_gallery, &new_gallery, &old_gallery.telegraph, old_gallery.message_id)
+
+        // 更新 telegraph
+        let path = old_gallery.telegraph.split('/').last().unwrap();
+        let old_page = Telegraph::get_page(&path, true).await?;
+        let new_page = self.telegraph.edit_page(
+            &old_page.path,
+            new_gallery.title_jp.as_ref().unwrap_or(&new_gallery.title),
+            &serde_json::to_string(&old_page.content)?,
+            false,
+        ).await?;
+
+        self.update_message(&old_gallery, &new_gallery, &new_page.url).await?;
+        DB.update_gallery(&old_gallery, &new_gallery, &new_page.url, old_gallery.message_id)
     }
 
     /// 更新旧消息并同时更新数据库

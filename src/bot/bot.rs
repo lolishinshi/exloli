@@ -62,31 +62,36 @@ async fn delete_gallery(message: &Update) -> Result<Message> {
     ))?)
 }
 
-async fn full_gallery(message: &Update, gallery: &Gallery) -> Result<Message> {
+async fn full_gallery(message: &Update, galleries: &[Gallery]) -> Result<Message> {
     info!("执行：/full");
-    let reply_message =
-        send!(message.reply_to("收到命令，将更新该画廊的完整版本……"))?.to_chat_or_inline_message();
-
-    let mut text = "更新完毕".to_owned();
-    if let Err(e) = EXLOLI.upload_gallery_by_url(&gallery.get_url(), true).await {
-        error!("上传出错：{}", e);
-        text = format!("更新失败：{}", e);
+    let mut text = "收到命令，上传完整版本中...".to_owned();
+    let mut reply_message = send!(message.reply_to(&text))?.to_chat_or_inline_message();
+    for (idx, gallery) in galleries.iter().enumerate() {
+        match EXLOLI.upload_gallery_by_url(&gallery.get_url(), true).await {
+            Ok(_) => text.push_str(&format!("\n第 {} 本，上传成功", idx + 1)),
+            Err(e) => text.push_str(&format!("\n第 {} 本，上传失败：{}", idx + 1, e)),
+        }
+        reply_message =
+            send!(message.bot.edit_message_text(reply_message, &text))?.to_chat_or_inline_message();
     }
+    text.push_str("\n上传完毕！");
     Ok(send!(message.bot.edit_message_text(reply_message, text))?)
 }
 
-async fn update_tag(message: &Update, g: &Gallery) -> Result<()> {
+async fn update_tag(message: &Update, galleries: &[Gallery]) -> Result<Message> {
     info!("执行：/update_tag");
-    let reply_message =
-        send!(message.reply_to("收到命令，将更新该画廊的 tag……"))?.to_chat_or_inline_message();
-
-    let mut text = "更新完毕".to_owned();
-    if let Err(e) = EXLOLI.update_tag(g).await {
-        error!("更新出错：{}", e);
-        text = format!("更新失败：{}", e);
+    let mut text = "收到命令，更新 tag 中...".to_owned();
+    let mut reply_message = send!(message.reply_to(&text))?.to_chat_or_inline_message();
+    for (idx, gallery) in galleries.iter().enumerate() {
+        match EXLOLI.update_tag(&gallery).await {
+            Ok(_) => text.push_str(&format!("\n第 {} 本，更新成功", idx + 1)),
+            Err(e) => text.push_str(&format!("\n第 {} 本，更新失败：{}", idx + 1, e)),
+        }
+        reply_message =
+            send!(message.bot.edit_message_text(reply_message, &text))?.to_chat_or_inline_message();
     }
-    send!(message.bot.edit_message_text(reply_message, text))?;
-    Ok(())
+    text.push_str("\n上传完毕！");
+    Ok(send!(message.bot.edit_message_text(reply_message, text))?)
 }
 
 async fn query_best(message: &Update, from: i64, to: i64, cnt: i64) -> Result<Message> {
@@ -179,14 +184,14 @@ async fn message_handler(message: Update) -> Result<()> {
         Ok(Upload(urls)) => {
             to_delete.push(upload_gallery(&message, urls).await?.id);
         }
+        Ok(UpdateTag(g)) => {
+            to_delete.push(update_tag(&message, g).await?.id);
+        }
         Ok(Query(urls)) => {
             query_gallery(&message, urls).await?;
         }
         Ok(Best([from, to, cnt])) => {
             query_best(&message, *from, *to, *cnt).await?;
-        }
-        Ok(UpdateTag(g)) => {
-            update_tag(&message, g).await?;
         }
         // 收到无效命令则立即返回
         Err(CommandError::NotACommand) => return Ok(()),
@@ -194,6 +199,10 @@ async fn message_handler(message: Update) -> Result<()> {
 
     // 对 query 和 best 命令的调用保留
     if matches!(cmd, Ok(Query(_)) | Ok(Best(_))) {
+        to_delete.clear();
+    }
+    // 没有直接回复画廊的 upload full update_tag 则保留
+    if matches!(cmd, Ok(Upload(_)) | Ok(Full(_)) | Ok(UpdateTag(_))) && message.update.reply_to_gallery().is_none() {
         to_delete.clear();
     }
 
