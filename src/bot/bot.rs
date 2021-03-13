@@ -34,7 +34,7 @@ async fn upload_gallery(message: &Update, urls: &[String]) -> Result<Message> {
     let mut text = "收到命令，上传中……".to_owned();
     let mut reply_message = send!(message.reply_to(&text))?.to_chat_or_inline_message();
     for (idx, url) in urls.iter().enumerate() {
-        match EXLOLI.upload_gallery_by_url(&url, false).await {
+        match EXLOLI.upload_gallery_by_url(&url).await {
             Ok(_) => text.push_str(&format!("\n第 {} 本 - 上传成功", idx + 1)),
             Err(e) => text.push_str(&format!("\n第 {} 本 - 上传失败：{}", idx + 1, e)),
         }
@@ -67,7 +67,7 @@ async fn full_gallery(message: &Update, galleries: &[Gallery]) -> Result<Message
     let mut text = "收到命令，上传完整版本中...".to_owned();
     let mut reply_message = send!(message.reply_to(&text))?.to_chat_or_inline_message();
     for (idx, gallery) in galleries.iter().enumerate() {
-        match EXLOLI.upload_gallery_by_url(&gallery.get_url(), true).await {
+        match EXLOLI.update_gallery(gallery, None).await {
             Ok(_) => text.push_str(&format!("\n第 {} 本，上传成功", idx + 1)),
             Err(e) => text.push_str(&format!("\n第 {} 本，上传失败：{}", idx + 1, e)),
         }
@@ -83,7 +83,7 @@ async fn update_tag(message: &Update, galleries: &[Gallery]) -> Result<Message> 
     let mut text = "收到命令，更新 tag 中...".to_owned();
     let mut reply_message = send!(message.reply_to(&text))?.to_chat_or_inline_message();
     for (idx, gallery) in galleries.iter().enumerate() {
-        match EXLOLI.update_tag(&gallery).await {
+        match EXLOLI.update_tag(&gallery, None).await {
             Ok(_) => text.push_str(&format!("\n第 {} 本，更新成功", idx + 1)),
             Err(e) => text.push_str(&format!("\n第 {} 本，更新失败：{}", idx + 1, e)),
         }
@@ -202,7 +202,9 @@ async fn message_handler(message: Update) -> Result<()> {
         to_delete.clear();
     }
     // 没有直接回复画廊的 upload full update_tag 则保留
-    if matches!(cmd, Ok(Upload(_)) | Ok(Full(_)) | Ok(UpdateTag(_))) && message.update.reply_to_gallery().is_none() {
+    if matches!(cmd, Ok(Upload(_)) | Ok(Full(_)) | Ok(UpdateTag(_)))
+        && message.update.reply_to_gallery().is_none()
+    {
         to_delete.clear();
     }
 

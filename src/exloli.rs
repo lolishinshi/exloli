@@ -4,6 +4,7 @@ use crate::utils::*;
 use crate::{BOT, CONFIG, DB};
 use anyhow::Result;
 use chrono::{Duration, Timelike, Utc};
+use futures::TryFutureExt;
 use telegraph_rs::{html_to_node, Page, Telegraph};
 use teloxide::prelude::*;
 use teloxide::types::ChatOrInlineMessage;
@@ -36,7 +37,10 @@ impl ExLoli {
             info!("检测中：{}", gallery.url);
             match DB.query_gallery_by_url(&gallery.url) {
                 Ok(g) => {
-                    self.update_gallery(g, gallery).await.log_on_error().await;
+                    self.update_gallery_tag(g, gallery)
+                        .await
+                        .log_on_error()
+                        .await;
                 }
                 _ => {
                     self.upload_gallery(gallery).await.log_on_error().await;
@@ -47,7 +51,11 @@ impl ExLoli {
     }
 
     /// 更新画廊信息
-    async fn update_gallery<'a>(&'a self, g: Gallery, gallery: BasicGalleryInfo<'a>) -> Result<()> {
+    async fn update_gallery_tag<'a>(
+        &'a self,
+        g: Gallery,
+        gallery: BasicGalleryInfo<'a>,
+    ) -> Result<()> {
         let now = Utc::now();
         let duration = Utc::today().naive_utc() - g.publish_date;
         // 已删除画廊不更新
@@ -68,16 +76,15 @@ impl ExLoli {
             info!("tag 有更新，同步中...");
             info!("画廊名称: {}", info.title);
             info!("画廊地址: {}", info.url);
-            self.update_gallery_info(g, &info).await?;
+            self.update_tag(&g, Some(&info)).await?;
         }
         Ok(())
     }
 
     /// 上传指定 URL 的画廊
-    pub async fn upload_gallery_by_url(&self, url: &str, update: bool) -> Result<()> {
+    pub async fn upload_gallery_by_url(&self, url: &str) -> Result<()> {
         let mut gallery = self.exhentai.get_gallery_by_url(url).await?;
         gallery.limit = false;
-        gallery.update = update;
         self.upload_gallery(gallery).await
     }
 
@@ -88,90 +95,134 @@ impl ExLoli {
         let mut gallery = basic_info.clone().into_full_info().await?;
 
         // 判断是否上传过并且不需要更新
-        let (update_in_place, old_gallery) = if basic_info.update {
-            (true, Some(DB.query_gallery_by_url(&basic_info.url)?))
-        } else {
-            match DB.query_gallery_by_title(&gallery.title) {
-                Ok(g) => {
-                    // 上传量已经达到限制的，不做更新
-                    if g.upload_images as usize == CONFIG.exhentai.max_img_cnt && gallery.limit {
-                        return Err(anyhow::anyhow!("AlreadyUpload"));
-                    }
-                    // FIXME: 如果只是修改而不是增加了图片的画廊会被认为重复而不进行更新
-                    // 如果已上传所有图片，则不进行更新
-                    if gallery.img_pages.len() == g.upload_images as usize {
-                        return Err(anyhow::anyhow!(
-                            "该画廊已存在：{}",
-                            get_message_url(g.message_id)
-                        ));
-                    }
-                    // FIXME: 当前判断方法可能会误判，而且修改最大图片数量以后会失效
-                    // 如果曾经更新过完整版，则继续上传完整版
-                    if g.upload_images as usize > CONFIG.exhentai.max_img_cnt {
-                        gallery.limit = false;
-                    }
-                    // 七天以内上传过的，不重复发，在原消息的基础上更新
-                    if g.publish_date + Duration::days(7) > Utc::today().naive_utc() {
-                        info!("找到历史上传：{}", g.message_id);
-                        (true, Some(g))
-                    } else {
-                        info!("历史上传已过期：{}", g.message_id);
-                        (false, Some(g))
-                    }
+        let (update_in_place, old_gallery) = match DB.query_gallery_by_title(&gallery.title) {
+            Ok(g) => {
+                // 上传量已经达到限制的，不做更新
+                if g.upload_images as usize == CONFIG.exhentai.max_img_cnt && gallery.limit {
+                    return Err(anyhow::anyhow!("AlreadyUpload"));
                 }
-                _ => (false, None),
+                // FIXME: 如果只是修改而不是增加了图片的画廊会被认为重复而不进行更新
+                // 如果已上传所有图片，则不进行更新
+                if gallery.img_pages.len() == g.upload_images as usize {
+                    return Err(anyhow::anyhow!(
+                        "该画廊已存在：{}",
+                        get_message_url(g.message_id)
+                    ));
+                }
+                // FIXME: 当前判断方法可能会误判，而且修改最大图片数量以后会失效
+                // 如果曾经更新过完整版，则继续上传完整版
+                if g.upload_images as usize > CONFIG.exhentai.max_img_cnt {
+                    gallery.limit = false;
+                }
+                // 七天以内上传过的，不重复发，在原消息的基础上更新
+                if g.publish_date + Duration::days(7) > Utc::today().naive_utc() {
+                    info!("找到历史上传：{}", g.message_id);
+                    return self.update_gallery(&g, Some(gallery)).await;
+                } else {
+                    info!("历史上传已过期：{}", g.message_id);
+                    (false, Some(g))
+                }
             }
+            _ => (false, None),
         };
 
         let img_urls = gallery.upload_images_to_telegraph().await?;
 
         // 上传到 telegraph
-        let title = gallery.title_jp.as_ref().unwrap_or(&gallery.title);
-        let content = Self::get_article_string(
-            &img_urls,
-            gallery.img_pages.len(),
-            if !update_in_place {
-                old_gallery.as_ref().map(|v| v.upload_images as usize)
-            } else {
-                None
-            },
-        );
+        let title = gallery.title();
+        let content = Self::get_article_string(&img_urls, gallery.img_pages.len(), None);
         let page = self.publish_to_telegraph(title, &content).await?;
         info!("文章地址: {}", page.url);
 
         match (update_in_place, old_gallery) {
-            // 需要原地更新的旧本子，直接编辑原来的消息
-            (true, Some(g)) => self.update_message(&g, &gallery, &page.url).await,
             // 不需要原地更新的旧本子，发布新消息
             (false, Some(g)) => {
                 let message = self.publish_to_telegram(&gallery, &page.url).await?;
                 DB.update_gallery(&g, &gallery, &page.url, message.id)
             }
             // 新本子，直接发布
-            (_, None) => {
+            (_, _) => {
                 let message = self.publish_to_telegram(&gallery, &page.url).await?;
                 DB.insert_gallery(&gallery, page.url, message.id)
             }
         }
     }
 
+    /// 原地更新画廊，若 gallery 为 None 则原地更新为原画廊的完整版
+    pub async fn update_gallery<'a>(
+        &self,
+        ogallery: &Gallery,
+        gallery: Option<FullGalleryInfo<'a>>,
+    ) -> Result<()> {
+        info!("更新画廊：{}", ogallery.get_url());
+        let gallery = match gallery {
+            Some(v) => v,
+            None => {
+                let mut gallery: FullGalleryInfo = self
+                    .exhentai
+                    .get_gallery_by_url(ogallery.get_url())
+                    .and_then(|g| g.into_full_info())
+                    .await?;
+                gallery.limit = false;
+                gallery
+            }
+        };
+
+        let img_urls = gallery.upload_images_to_telegraph().await?;
+
+        let title = gallery.title();
+        let content = Self::get_article_string(
+            &img_urls,
+            gallery.img_pages.len(),
+            Some(ogallery.upload_images as usize),
+        );
+        let page = self
+            .edit_telegraph(
+                ogallery.telegraph.split('/').last().unwrap(),
+                title,
+                &content,
+            )
+            .await?;
+        self.update_message(ogallery, &gallery, &page.url).await
+    }
+
     /// 更新 tag
-    pub async fn update_tag(&self, old_gallery: &Gallery) -> Result<()> {
+    pub async fn update_tag<'a>(
+        &self,
+        old_gallery: &Gallery,
+        new_gallery: Option<&FullGalleryInfo<'a>>,
+    ) -> Result<()> {
         let url = old_gallery.get_url();
-        let new_gallery = self.exhentai.get_gallery_by_url(&url).await?.into_full_info().await?;
+        let mut _g = None;
+        let new_gallery = match new_gallery {
+            Some(v) => v,
+            None => {
+                // fuck lifetime
+                _g = Some(
+                    self.exhentai
+                        .get_gallery_by_url(&url)
+                        .and_then(|g| g.into_full_info())
+                        .await?,
+                );
+                _g.as_ref().unwrap()
+            }
+        };
 
         // 更新 telegraph
         let path = old_gallery.telegraph.split('/').last().unwrap();
         let old_page = Telegraph::get_page(&path, true).await?;
-        let new_page = self.telegraph.edit_page(
-            &old_page.path,
-            new_gallery.title_jp.as_ref().unwrap_or(&new_gallery.title),
-            &serde_json::to_string(&old_page.content)?,
-            false,
-        ).await?;
+        let new_page = self
+            .telegraph
+            .edit_page(
+                &old_page.path,
+                new_gallery.title_jp.as_ref().unwrap_or(&new_gallery.title),
+                &serde_json::to_string(&old_page.content)?,
+                false,
+            )
+            .await?;
 
-        self.update_message(&old_gallery, &new_gallery, &new_page.url).await?;
-        DB.update_gallery(&old_gallery, &new_gallery, &new_page.url, old_gallery.message_id)
+        self.update_message(&old_gallery, &new_gallery, &new_page.url)
+            .await
     }
 
     /// 更新旧消息并同时更新数据库
@@ -186,19 +237,16 @@ impl ExLoli {
             chat_id: CONFIG.telegram.channel_id.clone(),
             message_id: old_gallery.message_id,
         };
-        let text = Self::get_message_string(gallery, article);
+        let mut text = Self::get_message_string(gallery, article);
+        // 增加一个不可见字符以期望成功编辑消息
+        text.push('\u{200b}');
         match BOT.edit_message_text(message, &text).send().await {
             Err(RequestError::ApiError {
                 kind: ApiErrorKind::Known(e),
                 ..
             }) => {
                 error!("{:?}", e);
-                DB.update_gallery(
-                    &old_gallery,
-                    &gallery,
-                    article,
-                    old_gallery.message_id,
-                )
+                DB.update_gallery(&old_gallery, &gallery, article, old_gallery.message_id)
             }
             Ok(mes) => DB.update_gallery(&old_gallery, &gallery, article, mes.id),
             Err(e) => Err(e.into()),
@@ -208,10 +256,19 @@ impl ExLoli {
     /// 将画廊内容上传至 telegraph
     async fn publish_to_telegraph<'a>(&self, title: &str, content: &str) -> Result<Page> {
         info!("上传到 Telegraph");
-        self.telegraph
+        Ok(self
+            .telegraph
             .create_page(title, &html_to_node(&content), false)
-            .await
-            .map_err(|e| e.into())
+            .await?)
+    }
+
+    /// 修改已有的 telegraph 文章
+    async fn edit_telegraph<'a>(&self, path: &str, title: &str, content: &str) -> Result<Page> {
+        info!("更新 Telegraph: {}", path);
+        Ok(self
+            .telegraph
+            .edit_page(path, title, content, false)
+            .await?)
     }
 
     /// 将画廊内容上传至 telegraph
@@ -228,12 +285,7 @@ impl ExLoli {
             .await?)
     }
 
-    async fn update_gallery_info<'a>(&self, og: Gallery, ng: &FullGalleryInfo<'a>) -> Result<()> {
-        self.update_message(&og, &ng, &og.telegraph).await?;
-        Ok(())
-    }
-
-    /// 生成用于发送消息的字符串，默认使用日文标题，在有日文标题的情况下会在消息中附上英文标题
+    /// 生成用于发送消息的字符串
     fn get_message_string<'a>(gallery: &FullGalleryInfo<'a>, article: &str) -> String {
         let mut tags = tags_to_string(&gallery.tags);
         tags.push_str(&format!(
@@ -241,7 +293,7 @@ impl ExLoli {
             article,
             escape(&gallery.title)
         ));
-        tags.push_str(&format!("\n<code>原始地址</code>: {}", gallery.url));
+        tags.push_str(&format!("\n<code>原始地址</code>: {} ", gallery.url));
         tags
     }
 

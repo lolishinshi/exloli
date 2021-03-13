@@ -55,8 +55,6 @@ pub struct BasicGalleryInfo<'a> {
     pub url: String,
     /// 是否限制图片数量
     pub limit: bool,
-    /// 这是否是一次更新操作，即永远不发布新消息
-    pub update: bool,
 }
 
 impl<'a> BasicGalleryInfo<'a> {
@@ -241,6 +239,10 @@ impl<'a> FullGalleryInfo<'a> {
             .map_err(|e| anyhow!("上传 telegraph 失败：{}", e))?;
         Ok(result.swap_remove(0).src)
     }
+
+    pub fn title(&self) -> &str {
+        self.title_jp.as_ref().unwrap_or(&self.title)
+    }
 }
 
 #[derive(Debug)]
@@ -353,7 +355,6 @@ impl ExHentai {
                 title,
                 url,
                 limit: true,
-                update: false,
             })
         }
 
@@ -373,17 +374,20 @@ impl ExHentai {
         Ok(result)
     }
 
-    pub async fn get_gallery_by_url<'a>(&'a self, url: &str) -> Result<BasicGalleryInfo<'a>> {
+    pub async fn get_gallery_by_url<'a, S: Into<String>>(
+        &'a self,
+        url: S,
+    ) -> Result<BasicGalleryInfo<'a>> {
+        let url = url.into();
         info!("获取本子信息: {}", url);
-        let response = send!(self.client.get(url))?;
+        let response = send!(self.client.get(&url))?;
         let html = parse_html(response.text().await?)?;
         let title = html.xpath_text(r#"//h1[@id="gn"]/text()"#)?.swap_remove(0);
         Ok(BasicGalleryInfo {
             client: &self.client,
             title,
-            url: url.to_owned(),
+            url,
             limit: true,
-            update: false,
         })
     }
 }
