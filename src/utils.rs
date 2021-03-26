@@ -87,3 +87,10 @@ pub fn get_timestamp() -> u64 {
         .expect("您穿越了？")
         .as_secs()
 }
+
+pub fn extract_telegraph_path(s: &str) -> &str {
+    s.split('/')
+        .last()
+        .and_then(|s| s.split('?').next())
+        .unwrap()
+}

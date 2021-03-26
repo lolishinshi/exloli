@@ -6,8 +6,9 @@ use crate::*;
 use anyhow::{Context, Result};
 use chrono::{Duration, Utc};
 use teloxide::types::*;
+use tokio_stream::wrappers::UnboundedReceiverStream;
 
-type Update = UpdateWithCx<Message>;
+type Update = UpdateWithCx<Bot, Message>;
 
 async fn send_pool(message: &Update) -> Result<()> {
     info!("频道消息更新，发送投票");
@@ -18,9 +19,13 @@ async fn send_pool(message: &Update) -> Result<()> {
         "不错哦".into(),
         "太棒了".into(),
     ];
-    let poll = send!(message
-        .bot
-        .send_poll(message.update.chat.id, "看完以后发表一下感想吧！", options)
+    let poll = send!(BOT
+        .send_poll(
+            message.update.chat.id,
+            "看完以后发表一下感想吧！",
+            options,
+            PollType::Regular
+        )
         .reply_to_message_id(message.update.id))?;
     let poll_id = poll.poll().unwrap().id.to_owned();
     let message_id = *message.update.forward_from_message_id().unwrap();
@@ -32,17 +37,21 @@ async fn send_pool(message: &Update) -> Result<()> {
 async fn upload_gallery(message: &Update, urls: &[String]) -> Result<Message> {
     info!("执行：/upload {:?}", urls);
     let mut text = "收到命令，上传中……".to_owned();
-    let mut reply_message = send!(message.reply_to(&text))?.to_chat_or_inline_message();
+    let mut reply_message = send!(message.reply_to(&text))?;
     for (idx, url) in urls.iter().enumerate() {
         match EXLOLI.upload_gallery_by_url(&url).await {
             Ok(_) => text.push_str(&format!("\n第 {} 本 - 上传成功", idx + 1)),
             Err(e) => text.push_str(&format!("\n第 {} 本 - 上传失败：{}", idx + 1, e)),
         }
         reply_message =
-            send!(message.bot.edit_message_text(reply_message, &text))?.to_chat_or_inline_message();
+            send!(BOT.edit_message_text(reply_message.chat.id, reply_message.id, &text))?;
     }
     text.push_str("\n上传完毕！");
-    Ok(send!(message.bot.edit_message_text(reply_message, text))?)
+    Ok(send!(BOT.edit_message_text(
+        reply_message.chat.id,
+        reply_message.id,
+        text
+    ))?)
 }
 
 async fn delete_gallery(message: &Update) -> Result<Message> {
@@ -52,8 +61,8 @@ async fn delete_gallery(message: &Update) -> Result<Message> {
     let mes_id = to_del
         .forward_from_message_id()
         .context("获取转发来源失败")?;
-    send!(message.bot.delete_message(to_del.chat.id, to_del.id))?;
-    send!(message.bot.delete_message(channel.id, *mes_id))?;
+    send!(BOT.delete_message(to_del.chat.id, to_del.id))?;
+    send!(BOT.delete_message(channel.id, *mes_id))?;
     DB.delete_gallery_by_message_id(*mes_id)?;
     let gallery = DB.query_gallery_by_message_id(*mes_id)?;
     Ok(send!(BOT.send_message(
@@ -65,33 +74,41 @@ async fn delete_gallery(message: &Update) -> Result<Message> {
 async fn full_gallery(message: &Update, galleries: &[Gallery]) -> Result<Message> {
     info!("执行：/full");
     let mut text = "收到命令，上传完整版本中...".to_owned();
-    let mut reply_message = send!(message.reply_to(&text))?.to_chat_or_inline_message();
+    let mut reply_message = send!(message.reply_to(&text))?;
     for (idx, gallery) in galleries.iter().enumerate() {
         match EXLOLI.update_gallery(gallery, None).await {
             Ok(_) => text.push_str(&format!("\n第 {} 本，上传成功", idx + 1)),
             Err(e) => text.push_str(&format!("\n第 {} 本，上传失败：{}", idx + 1, e)),
         }
         reply_message =
-            send!(message.bot.edit_message_text(reply_message, &text))?.to_chat_or_inline_message();
+            send!(BOT.edit_message_text(reply_message.chat.id, reply_message.id, &text))?;
     }
     text.push_str("\n上传完毕！");
-    Ok(send!(message.bot.edit_message_text(reply_message, text))?)
+    Ok(send!(BOT.edit_message_text(
+        reply_message.chat.id,
+        reply_message.id,
+        text
+    ))?)
 }
 
 async fn update_tag(message: &Update, galleries: &[Gallery]) -> Result<Message> {
     info!("执行：/update_tag");
     let mut text = "收到命令，更新 tag 中...".to_owned();
-    let mut reply_message = send!(message.reply_to(&text))?.to_chat_or_inline_message();
+    let mut reply_message = send!(message.reply_to(&text))?;
     for (idx, gallery) in galleries.iter().enumerate() {
         match EXLOLI.update_tag(&gallery, None).await {
             Ok(_) => text.push_str(&format!("\n第 {} 本，更新成功", idx + 1)),
             Err(e) => text.push_str(&format!("\n第 {} 本，更新失败：{}", idx + 1, e)),
         }
         reply_message =
-            send!(message.bot.edit_message_text(reply_message, &text))?.to_chat_or_inline_message();
+            send!(BOT.edit_message_text(reply_message.chat.id, reply_message.id, &text))?;
     }
     text.push_str("\n更新完毕！");
-    Ok(send!(message.bot.edit_message_text(reply_message, text))?)
+    Ok(send!(BOT.edit_message_text(
+        reply_message.chat.id,
+        reply_message.id,
+        text
+    ))?)
 }
 
 async fn query_best(message: &Update, from: i64, to: i64, cnt: i64) -> Result<Message> {
@@ -212,7 +229,7 @@ async fn message_handler(message: Update) -> Result<()> {
     if !to_delete.is_empty() && message.update.is_from_my_group() {
         let chat_id = message.chat_id();
         tokio::spawn(async move {
-            delay_for(time::Duration::from_secs(60)).await;
+            sleep(time::Duration::from_secs(60)).await;
             for id in to_delete {
                 send!(BOT.delete_message(chat_id, id)).log_on_error().await;
             }
@@ -221,7 +238,7 @@ async fn message_handler(message: Update) -> Result<()> {
     Ok(())
 }
 
-async fn poll_handler(poll: UpdateWithCx<Poll>) -> Result<()> {
+async fn poll_handler(poll: UpdateWithCx<Bot, Poll>) -> Result<()> {
     let options = poll.update.options;
     let man_cnt = options.iter().map(|s| s.voter_count).sum::<i32>() as f32;
     let score = options
@@ -234,7 +251,7 @@ async fn poll_handler(poll: UpdateWithCx<Poll>) -> Result<()> {
     DB.update_score(&poll.update.id, score)
 }
 
-async fn inline_handler(query: UpdateWithCx<InlineQuery>) -> Result<()> {
+async fn inline_handler(query: UpdateWithCx<Bot, InlineQuery>) -> Result<()> {
     let text = query.update.query.trim();
     info!("行内查询：{}", text);
     let mut answer = vec![];
@@ -250,25 +267,25 @@ async fn inline_handler(query: UpdateWithCx<InlineQuery>) -> Result<()> {
             "没有找到",
         )));
     }
-    send!(query.bot.answer_inline_query(query.update.id, answer))?;
+    send!(BOT.answer_inline_query(query.update.id, answer))?;
     Ok(())
 }
 
 pub async fn start_bot() {
     info!("BOT 启动");
     Dispatcher::new(BOT.clone())
-        .messages_handler(|rx: DispatcherHandlerRx<Message>| {
-            rx.for_each_concurrent(8, |message| async {
+        .messages_handler(|rx: DispatcherHandlerRx<Bot, Message>| {
+            UnboundedReceiverStream::new(rx).for_each_concurrent(8, |message| async {
                 message_handler(message).await.log_on_error().await;
             })
         })
-        .polls_handler(|rx: DispatcherHandlerRx<Poll>| {
-            rx.for_each_concurrent(8, |message| async {
+        .polls_handler(|rx: DispatcherHandlerRx<Bot, Poll>| {
+            UnboundedReceiverStream::new(rx).for_each_concurrent(8, |message| async {
                 poll_handler(message).await.log_on_error().await;
             })
         })
-        .inline_queries_handler(|rx: DispatcherHandlerRx<InlineQuery>| {
-            rx.for_each_concurrent(8, |message| async {
+        .inline_queries_handler(|rx: DispatcherHandlerRx<Bot, InlineQuery>| {
+            UnboundedReceiverStream::new(rx).for_each_concurrent(8, |message| async {
                 inline_handler(message).await.log_on_error().await;
             })
         })

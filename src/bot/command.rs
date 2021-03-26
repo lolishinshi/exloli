@@ -33,7 +33,7 @@ pub enum RuaCommand {
 
 impl RuaCommand {
     /// 将消息解析为命令
-    pub fn parse(message: &UpdateWithCx<Message>, bot_id: &str) -> Result<Self, CommandError> {
+    pub fn parse(message: &UpdateWithCx<Bot, Message>, bot_id: &str) -> Result<Self, CommandError> {
         use CommandError::*;
 
         let text = message.update.text().unwrap_or("");

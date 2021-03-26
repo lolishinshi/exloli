@@ -15,8 +15,7 @@ use anyhow::Error;
 use futures::executor::block_on;
 use once_cell::sync::Lazy;
 use teloxide::prelude::*;
-use teloxide::types::ParseMode;
-use tokio::time::delay_for;
+use tokio::time::sleep;
 
 use std::env;
 use std::str::FromStr;
@@ -32,13 +31,13 @@ mod trans;
 mod utils;
 mod xpath;
 
-static CONFIG: Lazy<Config> = Lazy::new(|| Config::new("config.toml").expect("配置文件解析失败"));
-static BOT: Lazy<Bot> = Lazy::new(|| {
-    teloxide::BotBuilder::new()
-        .token(&CONFIG.telegram.token)
-        .parse_mode(ParseMode::HTML)
-        .build()
+static CONFIG: Lazy<Config> = Lazy::new(|| {
+    let config_file = std::env::var("EXLOLI_CONFIG");
+    let config_file = config_file.as_deref().unwrap_or("config.toml");
+    Config::new(config_file).expect("配置文件解析失败")
 });
+// TODO: Use AutoSend ??
+static BOT: Lazy<Bot> = Lazy::new(|| teloxide::Bot::new(&CONFIG.telegram.token));
 static DB: Lazy<DataBase> = Lazy::new(DataBase::init);
 static EXLOLI: Lazy<ExLoli> = Lazy::new(|| block_on(ExLoli::new()).expect("登录失败"));
 
@@ -97,6 +96,6 @@ async fn run() -> Result<(), Error> {
             }
         }
         info!("休眠中，预计 {} 分钟后开始工作", CONFIG.interval / 60);
-        delay_for(time::Duration::from_secs(CONFIG.interval)).await;
+        sleep(time::Duration::from_secs(CONFIG.interval)).await;
     }
 }

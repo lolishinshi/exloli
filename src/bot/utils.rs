@@ -22,7 +22,6 @@ pub trait MessageExt {
     fn from_username(&self) -> Option<&String>;
     fn reply_to_user(&self) -> Option<&User>;
     fn reply_to_gallery(&self) -> Option<Gallery>;
-    fn to_chat_or_inline_message(&self) -> ChatOrInlineMessage;
 }
 
 impl MessageExt for Message {
@@ -53,13 +52,6 @@ impl MessageExt for Message {
             .and_then(|message| message.forward_from_message_id())
             .and_then(|mess_id| DB.query_gallery_by_message_id(*mess_id).ok())
     }
-
-    fn to_chat_or_inline_message(&self) -> ChatOrInlineMessage {
-        ChatOrInlineMessage::Chat {
-            chat_id: ChatId::Id(self.chat.id),
-            message_id: self.id,
-        }
-    }
 }
 
 /// 获取管理员列表，提供 1 个小时的缓存
@@ -74,7 +66,7 @@ async fn get_admins() -> Vec<User> {
 }
 
 // 检测是否是指定频道的管理员
-pub fn check_is_channel_admin(message: &UpdateWithCx<Message>) -> bool {
+pub fn check_is_channel_admin(message: &UpdateWithCx<Bot, Message>) -> bool {
     // 先检测是否为匿名管理员
     let from_user = message.update.from();
     if from_user

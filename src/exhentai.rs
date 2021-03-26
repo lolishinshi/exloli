@@ -7,7 +7,7 @@ use reqwest::header::{self, HeaderMap, HeaderValue};
 use reqwest::{redirect::Policy, Client, Proxy, Response};
 use telegraph_rs::Telegraph;
 use tempfile::NamedTempFile;
-use tokio::time::delay_for;
+use tokio::time::sleep;
 
 use once_cell::sync::Lazy;
 use std::io::Write;
@@ -192,7 +192,7 @@ impl<'a> FullGalleryInfo<'a> {
                         error!("获取图片地址失败：{}", e);
                     }
                 }
-                delay_for(Duration::from_secs(10)).await;
+                sleep(Duration::from_secs(10)).await;
             }
             Err(format_err!("无法获图片地址"))
         };
@@ -234,7 +234,7 @@ impl<'a> FullGalleryInfo<'a> {
         let file = tmp.path().to_owned();
 
         debug!("上传图片中...");
-        let mut result = Telegraph::upload(&[file])
+        let mut result = Telegraph::upload_with(&[file], &client)
             .await
             .map_err(|e| anyhow!("上传 telegraph 失败：{}", e))?;
         Ok(result.swap_remove(0).src)

@@ -7,8 +7,7 @@ use chrono::{Duration, Timelike, Utc};
 use futures::TryFutureExt;
 use telegraph_rs::{html_to_node, Page, Telegraph};
 use teloxide::prelude::*;
-use teloxide::types::ChatOrInlineMessage;
-use teloxide::ApiErrorKind;
+use teloxide::types::ParseMode;
 use v_htmlescape::escape;
 
 pub struct ExLoli {
@@ -177,11 +176,7 @@ impl ExLoli {
             (ogallery.upload_images != 0).then(|| ogallery.upload_images as usize),
         );
         let page = self
-            .edit_telegraph(
-                ogallery.telegraph.split('/').last().unwrap(),
-                title,
-                &content,
-            )
+            .edit_telegraph(extract_telegraph_path(&ogallery.telegraph), title, &content)
             .await?;
         let url = format!("{}?_={}", page.url, get_timestamp());
         self.update_message(ogallery, &gallery, &url).await
@@ -210,7 +205,7 @@ impl ExLoli {
         };
 
         // 更新 telegraph
-        let path = old_gallery.telegraph.split('/').last().unwrap();
+        let path = extract_telegraph_path(&old_gallery.telegraph);
         let old_page = Telegraph::get_page(&path, true).await?;
         let new_page = self
             .telegraph
@@ -234,19 +229,17 @@ impl ExLoli {
         article: &str,
     ) -> Result<()> {
         info!("更新 Telegram 频道消息");
-        let message = ChatOrInlineMessage::Chat {
-            chat_id: CONFIG.telegram.channel_id.clone(),
-            message_id: old_gallery.message_id,
-        };
         let text = Self::get_message_string(gallery, article);
-        match BOT.edit_message_text(message, &text).send().await {
-            Err(RequestError::ApiError {
-                kind: ApiErrorKind::Known(e),
-                ..
-            }) => {
-                error!("{:?}", e);
-                DB.update_gallery(&old_gallery, &gallery, article, old_gallery.message_id)
-            }
+        match BOT
+            .edit_message_text(
+                CONFIG.telegram.channel_id.clone(),
+                old_gallery.message_id,
+                &text,
+            )
+            .parse_mode(ParseMode::Html)
+            .send()
+            .await
+        {
             Ok(mes) => DB.update_gallery(&old_gallery, &gallery, article, mes.id),
             Err(e) => Err(e.into()),
         }
@@ -280,6 +273,7 @@ impl ExLoli {
         let text = Self::get_message_string(gallery, article);
         Ok(BOT
             .send_message(CONFIG.telegram.channel_id.clone(), &text)
+            .parse_mode(ParseMode::Html)
             .send()
             .await?)
     }
