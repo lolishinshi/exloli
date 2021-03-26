@@ -90,7 +90,7 @@ async fn update_tag(message: &Update, galleries: &[Gallery]) -> Result<Message> 
         reply_message =
             send!(message.bot.edit_message_text(reply_message, &text))?.to_chat_or_inline_message();
     }
-    text.push_str("\n上传完毕！");
+    text.push_str("\n更新完毕！");
     Ok(send!(message.bot.edit_message_text(reply_message, text))?)
 }
 

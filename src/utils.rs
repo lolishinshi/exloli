@@ -2,6 +2,7 @@ use crate::trans::TRANS;
 use crate::CONFIG;
 use std::borrow::Cow;
 use std::str::FromStr;
+use std::time::SystemTime;
 
 /// 将图片地址格式化为 html
 pub fn img_urls_to_html(img_urls: &[String]) -> String {
@@ -78,4 +79,11 @@ pub fn get_message_url(id: i32) -> String {
     format!("https://t.me/{}/{}", CONFIG.telegram.channel_id, id)
         .replace("/-100", "/")
         .replace("@", "")
+}
+
+pub fn get_timestamp() -> u64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("您穿越了？")
+        .as_secs()
 }

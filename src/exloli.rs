@@ -174,7 +174,7 @@ impl ExLoli {
         let content = Self::get_article_string(
             &img_urls,
             gallery.img_pages.len(),
-            Some(ogallery.upload_images as usize),
+            (ogallery.upload_images != 0).then(|| ogallery.upload_images as usize),
         );
         let page = self
             .edit_telegraph(
@@ -183,7 +183,8 @@ impl ExLoli {
                 &content,
             )
             .await?;
-        self.update_message(ogallery, &gallery, &page.url).await
+        let url = format!("{}?_={}", page.url, get_timestamp());
+        self.update_message(ogallery, &gallery, &url).await
     }
 
     /// 更新 tag
@@ -237,9 +238,7 @@ impl ExLoli {
             chat_id: CONFIG.telegram.channel_id.clone(),
             message_id: old_gallery.message_id,
         };
-        let mut text = Self::get_message_string(gallery, article);
-        // 增加一个不可见字符以期望成功编辑消息
-        text.push('\u{200b}');
+        let text = Self::get_message_string(gallery, article);
         match BOT.edit_message_text(message, &text).send().await {
             Err(RequestError::ApiError {
                 kind: ApiErrorKind::Known(e),
@@ -267,7 +266,7 @@ impl ExLoli {
         info!("更新 Telegraph: {}", path);
         Ok(self
             .telegraph
-            .edit_page(path, title, content, false)
+            .edit_page(path, title, &html_to_node(&content), false)
             .await?)
     }
 
