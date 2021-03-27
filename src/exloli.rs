@@ -248,19 +248,17 @@ impl ExLoli {
     /// 将画廊内容上传至 telegraph
     async fn publish_to_telegraph<'a>(&self, title: &str, content: &str) -> Result<Page> {
         info!("上传到 Telegraph");
-        Ok(self
-            .telegraph
-            .create_page(title, &html_to_node(&content), false)
-            .await?)
+        let text = html_to_node(&content);
+        trace!("{}", text);
+        Ok(self.telegraph.create_page(title, &text, false).await?)
     }
 
     /// 修改已有的 telegraph 文章
     async fn edit_telegraph<'a>(&self, path: &str, title: &str, content: &str) -> Result<Page> {
         info!("更新 Telegraph: {}", path);
-        Ok(self
-            .telegraph
-            .edit_page(path, title, &html_to_node(&content), false)
-            .await?)
+        let text = html_to_node(&content);
+        trace!("{}", text);
+        Ok(self.telegraph.edit_page(path, title, &text, false).await?)
     }
 
     /// 将画廊内容上传至 telegraph
