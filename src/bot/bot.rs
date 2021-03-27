@@ -133,7 +133,7 @@ async fn query_best(message: &Update, from: i64, to: i64, cnt: i64) -> Result<Me
             .collect::<Vec<_>>()
             .join("\n"),
     );
-    Ok(send!(message.reply_to(text))?)
+    Ok(send!(message.reply_to(text).parse_mode(ParseMode::Html))?)
 }
 
 /// 查询画廊，若失败则返回失败消息，成功则直接发送
