@@ -94,7 +94,7 @@ impl DataBase {
             token,
             message_id,
         };
-        diesel::insert_or_ignore_into(gallery::table)
+        diesel::insert_into(gallery::table)
             .values(&gallery)
             .execute(&self.pool.get()?)?;
         Ok(())

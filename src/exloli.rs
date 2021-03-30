@@ -94,7 +94,8 @@ impl ExLoli {
         let mut gallery = basic_info.clone().into_full_info().await?;
 
         // 判断是否上传过并且不需要更新
-        if let Ok(g) = DB.query_gallery_by_title(&gallery.title) {
+        let old_gallery = DB.query_gallery_by_title(&gallery.title);
+        if let Ok(g) = &old_gallery {
             // 上传量已经达到限制的，不做更新
             if g.upload_images as usize == CONFIG.exhentai.max_img_cnt && gallery.limit {
                 return Err(anyhow::anyhow!("NoNeedToUpdate"));
@@ -131,7 +132,12 @@ impl ExLoli {
 
         // 不需要原地更新的旧本子，发布新消息
         let message = self.publish_to_telegram(&gallery, &page.url).await?;
-        DB.insert_gallery(&gallery, page.url, message.id)
+
+        if let Ok(g) = old_gallery {
+            DB.update_gallery(&g, &gallery, &page.url, message.id)
+        } else {
+            DB.insert_gallery(&gallery, page.url, message.id)
+        }
     }
 
     /// 原地更新画廊，若 gallery 为 None 则原地更新为原画廊的完整版
