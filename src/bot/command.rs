@@ -72,7 +72,7 @@ impl RuaCommand {
                     true => Err(WrongCommand("用法：请指定需要上传的画廊")),
                 }
             }
-            ("update_tag", true) => {
+            ("uptag", true) => {
                 let mut arg = get_galleries(args);
                 if let Some(g) = message.update.reply_to_gallery() {
                     arg.push(g);

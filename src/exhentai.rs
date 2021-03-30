@@ -115,6 +115,7 @@ impl<'a> BasicGalleryInfo<'a> {
             html = parse_html(text)?;
             img_pages.extend(html.xpath_text(r#"//div[@id="gdt"]//a/@href"#)?);
         }
+        debug!("页数：{}", img_pages.len());
 
         Ok(FullGalleryInfo {
             client: self.client,

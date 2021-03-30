@@ -97,7 +97,7 @@ impl ExLoli {
         if let Ok(g) = DB.query_gallery_by_title(&gallery.title) {
             // 上传量已经达到限制的，不做更新
             if g.upload_images as usize == CONFIG.exhentai.max_img_cnt && gallery.limit {
-                return Err(anyhow::anyhow!("AlreadyUpload"));
+                return Err(anyhow::anyhow!("NoNeedToUpdate"));
             }
             // FIXME: 如果只是修改而不是增加了图片的画廊会被认为重复而不进行更新
             // 如果已上传所有图片，则不进行更新
