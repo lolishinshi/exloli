@@ -23,6 +23,7 @@ pub struct ExHentai {
     pub search_params: Vec<(String, String)>,
     pub max_pages: i32,
     pub max_img_cnt: usize,
+    pub outdate: Option<i64>,
     pub proxy: Option<String>,
 }
 

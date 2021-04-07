@@ -113,8 +113,9 @@ impl ExLoli {
             if g.upload_images as usize > CONFIG.exhentai.max_img_cnt {
                 gallery.limit = false;
             }
-            // 七天以内上传过的，不重复发，在原消息的基础上更新
-            if g.publish_date + Duration::days(7) > Utc::today().naive_utc() {
+            // outdate 天以内上传过的，不重复发，在原消息的基础上更新
+            let outdate = CONFIG.exhentai.outdate.unwrap_or(7);
+            if g.publish_date + Duration::days(outdate) > Utc::today().naive_utc() {
                 info!("找到历史上传：{}", g.message_id);
                 return self.update_gallery(&g, Some(gallery)).await;
             } else {

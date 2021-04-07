@@ -48,6 +48,8 @@ search_params = [
 max_pages = 2
 # 最大展示的图片数量
 max_img_cnt = 50
+# 超过多少天后更新的本子将重新发送消息
+outdate = 14
 
 [telegraph]
 # telegraph 账号 token
