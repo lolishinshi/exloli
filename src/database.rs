@@ -23,6 +23,7 @@ pub struct Gallery {
     pub message_id: i32,
     pub poll_id: String,
     pub score: f32,
+    pub votes: String,
 }
 
 #[derive(Queryable, Insertable)]
@@ -87,6 +88,7 @@ impl DataBase {
             tags: serde_json::to_string(&info.tags)?,
             publish_date: Utc::today().naive_utc(),
             score: 0.0,
+            votes: "[]".to_string(),
             upload_images: info.get_image_lists().len() as i16,
             poll_id: "".to_string(),
             telegraph,
@@ -171,10 +173,10 @@ impl DataBase {
         Ok(())
     }
 
-    pub fn update_score(&self, poll_id: &str, score: f32) -> Result<()> {
+    pub fn update_score(&self, poll_id: &str, score: f32, votes: &str) -> Result<()> {
         diesel::update(gallery::table)
             .filter(gallery::poll_id.eq(poll_id))
-            .set(gallery::score.eq(score))
+            .set((gallery::score.eq(score), gallery::votes.eq(votes)))
             .execute(&self.pool.get()?)?;
         Ok(())
     }

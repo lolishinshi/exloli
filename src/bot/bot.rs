@@ -126,7 +126,7 @@ async fn query_best(message: &Update, from: i64, to: i64, cnt: i64) -> Result<Me
                 format!(
                     r#"<a href="{}">{:.2} - {}</a>"#,
                     get_message_url(g.message_id),
-                    g.score,
+                    g.score * 100.0,
                     g.title
                 )
             })
@@ -240,15 +240,11 @@ async fn message_handler(message: Update) -> Result<()> {
 
 async fn poll_handler(poll: UpdateWithCx<Bot, Poll>) -> Result<()> {
     let options = poll.update.options;
-    let man_cnt = options.iter().map(|s| s.voter_count).sum::<i32>() as f32;
-    let score = options
-        .iter()
-        .enumerate()
-        .map(|(i, s)| (i as i32 + 1) * s.voter_count)
-        .sum::<i32>() as f32;
-    let score = score / man_cnt;
+    let votes = options.iter().map(|s| s.voter_count).collect::<Vec<_>>();
+    let score = wilson_score(&votes);
+    let votes = serde_json::to_string(&votes)?;
     debug!("投票状态变动：{} -> {}", poll.update.id, score);
-    DB.update_score(&poll.update.id, score)
+    DB.update_score(&poll.update.id, score, &votes)
 }
 
 async fn inline_handler(query: UpdateWithCx<Bot, InlineQuery>) -> Result<()> {

@@ -10,6 +10,7 @@ table! {
         message_id -> Integer,
         poll_id -> Text,
         score -> Float,
+        votes -> Text,
     }
 }
 
@@ -21,4 +22,7 @@ table! {
     }
 }
 
-allow_tables_to_appear_in_same_query!(gallery, images);
+allow_tables_to_appear_in_same_query!(
+    gallery,
+    images,
+);

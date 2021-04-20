@@ -100,3 +100,30 @@ where
         InputMessageContent::Text(InputMessageContentText::new(content)),
     )
 }
+
+/// 威尔逊得分
+/// 基于：https://www.jianshu.com/p/4d2b45918958
+pub fn wilson_score(votes: &[i32]) -> f32 {
+    let base = [0., 0.25, 0.5, 0.75, 1.];
+    let count = votes.iter().sum::<i32>() as f32;
+    if count == 0. {
+        return 0.;
+    }
+    let mean = votes
+        .iter()
+        .zip(base.iter())
+        .map(|(&a, &b)| a as f32 * b)
+        .sum::<f32>()
+        / count;
+    let var = votes
+        .iter()
+        .zip(base.iter())
+        .map(|(&a, &b)| (mean - b).powi(2) * a as f32)
+        .sum::<f32>()
+        / count;
+    // 80% 置信度
+    let z = 1.281f32;
+
+    (mean + z.powi(2) / (2. * count) - ((z / (2. * count)) * (4. * count * var + z.powi(2)).sqrt()))
+        / (1. + z.powi(2) / count)
+}
