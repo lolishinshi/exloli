@@ -5,6 +5,7 @@ use crate::utils::get_message_url;
 use crate::*;
 use anyhow::{Context, Result};
 use chrono::{Duration, Utc};
+use std::convert::TryInto;
 use teloxide::types::*;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
@@ -111,29 +112,58 @@ async fn update_tag(message: &Update, galleries: &[Gallery]) -> Result<Message> 
     ))?)
 }
 
-async fn query_best(message: &Update, from: i64, to: i64, cnt: i64) -> Result<Message> {
-    info!("执行：/best {} {} {}", from, to, cnt);
+fn query_best_text(from: i64, to: i64, offset: i64) -> Result<String> {
     let (from_d, to_d) = (
         Utc::today().naive_utc() - Duration::days(from),
         Utc::today().naive_utc() - Duration::days(to),
     );
-    let galleries = DB.query_best(from_d, to_d, cnt)?;
-    let mut text = format!("最近 {} - {} 天评分最高的 {} 本本子：\n", from, to, cnt);
-    text.push_str(
-        &galleries
-            .iter()
-            .map(|g| {
-                format!(
-                    r#"<a href="{}">{:.2} - {}</a>"#,
-                    get_message_url(g.message_id),
-                    g.score * 100.0,
-                    g.title
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("\n"),
-    );
-    Ok(send!(message.reply_to(text).parse_mode(ParseMode::Html))?)
+    let galleries = DB.query_best(from_d, to_d, offset)?;
+    let list = galleries
+        .iter()
+        .map(|g| {
+            format!(
+                r#"<a href="{}">{:.2} - {}</a>"#,
+                get_message_url(g.message_id),
+                g.score * 100.,
+                g.title
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut text = format!("最近 {} - {} 天的本子排名（{}）：\n", from, to, offset);
+    text.push_str(&list);
+    Ok(text)
+}
+
+fn query_best_keyboard(from: i64, to: i64, offset: i64) -> InlineKeyboardMarkup {
+    InlineKeyboardMarkup::new(vec![vec![
+        InlineKeyboardButton::new(
+            "<<",
+            InlineKeyboardButtonKind::CallbackData(format!("<< {} {} {}", from, to, offset)),
+        ),
+        InlineKeyboardButton::new(
+            "<",
+            InlineKeyboardButtonKind::CallbackData(format!("< {} {} {}", from, to, offset)),
+        ),
+        InlineKeyboardButton::new(
+            ">",
+            InlineKeyboardButtonKind::CallbackData(format!("> {} {} {}", from, to, offset)),
+        ),
+        InlineKeyboardButton::new(
+            ">>",
+            InlineKeyboardButtonKind::CallbackData(format!(">> {} {} {}", from, to, offset)),
+        ),
+    ]])
+}
+
+async fn query_best(message: &Update, from: i64, to: i64) -> Result<Message> {
+    info!("执行：/best {} {}", from, to);
+    let text = query_best_text(from, to, 1)?;
+    let reply_markup = query_best_keyboard(from, to, 1);
+    Ok(send!(message
+        .reply_to(text)
+        .reply_markup(reply_markup)
+        .parse_mode(ParseMode::Html))?)
 }
 
 /// 查询画廊，若失败则返回失败消息，成功则直接发送
@@ -207,8 +237,8 @@ async fn message_handler(message: Update) -> Result<()> {
         Ok(Query(urls)) => {
             query_gallery(&message, urls).await?;
         }
-        Ok(Best([from, to, cnt])) => {
-            query_best(&message, *from, *to, *cnt).await?;
+        Ok(Best([from, to])) => {
+            query_best(&message, *from, *to).await?;
         }
         // 收到无效命令则立即返回
         Err(CommandError::NotACommand) => return Ok(()),
@@ -267,6 +297,58 @@ async fn inline_handler(query: UpdateWithCx<Bot, InlineQuery>) -> Result<()> {
     Ok(())
 }
 
+async fn callback_handler(callback: UpdateWithCx<Bot, CallbackQuery>) -> Result<()> {
+    let update = callback.update;
+    info!("回调：{:?}", update.data);
+
+    let (cmd, data) = match update.data.as_ref().and_then(|v| {
+        // TODO: split_once
+        v.find(' ').map(|n| (&v[..n], &v[n + 1..]))
+    }) {
+        Some(v) => v,
+        None => return Ok(()),
+    };
+
+    let message = match update.message {
+        Some(v) => v,
+        None => {
+            send!(BOT
+                .answer_callback_query(update.id)
+                .text("该消息过旧")
+                .show_alert(true))?;
+            return Ok(());
+        }
+    };
+    match cmd {
+        "<<" | ">>" | "<" | ">" => {
+            // vec![from, to, offset]
+            let data = data
+                .split(' ')
+                .map(|s| s.parse::<i64>())
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            let [from, to, mut offset] = match TryInto::<[i64; 3]>::try_into(data) {
+                Ok(v) => v,
+                _ => return Ok(()),
+            };
+            match cmd {
+                ">" => offset += 20,
+                "<" => offset -= 20,
+                ">>" => offset = -1,
+                "<<" => offset = 1,
+                _ => (),
+            };
+            let text = query_best_text(from, to, offset)?;
+            let reply = query_best_keyboard(from, to, offset);
+            send!(BOT
+                .edit_message_text(message.chat.id, message.id, &text)
+                .parse_mode(ParseMode::Html)
+                .reply_markup(reply))?;
+        }
+        _ => error!("未知指令：{}", cmd),
+    };
+    Ok(())
+}
+
 pub async fn start_bot() {
     info!("BOT 启动");
     Dispatcher::new(BOT.clone())
@@ -283,6 +365,11 @@ pub async fn start_bot() {
         .inline_queries_handler(|rx: DispatcherHandlerRx<Bot, InlineQuery>| {
             UnboundedReceiverStream::new(rx).for_each_concurrent(8, |message| async {
                 inline_handler(message).await.log_on_error().await;
+            })
+        })
+        .callback_queries_handler(|rx: DispatcherHandlerRx<Bot, CallbackQuery>| {
+            UnboundedReceiverStream::new(rx).for_each_concurrent(8, |message| async {
+                callback_handler(message).await.log_on_error().await;
             })
         })
         .dispatch()

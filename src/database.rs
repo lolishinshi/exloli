@@ -144,15 +144,21 @@ impl DataBase {
         Ok(())
     }
 
-    /// 查询自指定日期以来分数大于指定分数的若干本本子
-    pub fn query_best(&self, from: NaiveDate, to: NaiveDate, mut cnt: i64) -> Result<Vec<Gallery>> {
-        let ordering: Box<dyn BoxableExpression<gallery::table, Sqlite, SqlType = ()>> = if cnt > 0
-        {
-            Box::new(gallery::score.desc())
-        } else {
-            cnt = -cnt;
-            Box::new(gallery::score.asc())
-        };
+    /// 查询自指定日期以来分数大于指定分数的 20 本本子
+    /// offset 为 1 表示正序，-1 表示逆序
+    pub fn query_best(
+        &self,
+        from: NaiveDate,
+        to: NaiveDate,
+        mut offset: i64,
+    ) -> Result<Vec<Gallery>> {
+        let ordering: Box<dyn BoxableExpression<gallery::table, Sqlite, SqlType = ()>> =
+            if offset > 0 {
+                Box::new(gallery::score.desc())
+            } else {
+                offset = -offset;
+                Box::new(gallery::score.asc())
+            };
         Ok(gallery::table
             .filter(
                 gallery::publish_date
@@ -161,7 +167,8 @@ impl DataBase {
                     .and(gallery::score.gt(0.0)),
             )
             .order_by(ordering)
-            .limit(cnt)
+            .offset(offset - 1)
+            .limit(20)
             .load::<Gallery>(&self.pool.get()?)?)
     }
 
