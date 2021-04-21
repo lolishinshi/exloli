@@ -106,7 +106,7 @@ where
 pub fn wilson_score(votes: &[i32]) -> f32 {
     let base = [0., 0.25, 0.5, 0.75, 1.];
     let mut votes = votes.to_owned();
-    let count = votes.iter().sum::<i32>() as f32;
+    let mut count = votes.iter().sum::<i32>() as f32;
     if count == 0. {
         return 0.;
     }
@@ -119,6 +119,7 @@ pub fn wilson_score(votes: &[i32]) -> f32 {
             Some(v) => *v -= 1,
             _ => *first -= 1,
         }
+        count -= 2.;
     }
     let mean = votes
         .iter()
