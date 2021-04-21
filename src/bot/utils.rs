@@ -105,9 +105,20 @@ where
 /// 基于：https://www.jianshu.com/p/4d2b45918958
 pub fn wilson_score(votes: &[i32]) -> f32 {
     let base = [0., 0.25, 0.5, 0.75, 1.];
+    let mut votes = votes.to_owned();
     let count = votes.iter().sum::<i32>() as f32;
     if count == 0. {
         return 0.;
+    }
+    // 减小极值对评分的影响
+    if count >= 5. {
+        let mut iter = votes.iter_mut().filter(|n| **n != 0);
+        let first = iter.next().unwrap();
+        *first -= 1;
+        match iter.last() {
+            Some(v) => *v -= 1,
+            _ => *first -= 1,
+        }
     }
     let mean = votes
         .iter()
