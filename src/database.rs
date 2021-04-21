@@ -144,6 +144,14 @@ impl DataBase {
         Ok(())
     }
 
+    /// 根据消息 id 删除画廊，这是真的删除
+    pub fn real_delete_gallery_by_message_id(&self, message_id: i32) -> Result<()> {
+        diesel::delete(gallery::table)
+            .filter(gallery::message_id.eq(message_id))
+            .execute(&self.pool.get()?)?;
+        Ok(())
+    }
+
     /// 查询自指定日期以来分数大于指定分数的 20 本本子
     /// offset 为 1 表示正序，-1 表示逆序
     pub fn query_best(
@@ -164,7 +172,8 @@ impl DataBase {
                 gallery::publish_date
                     .ge(to)
                     .and(gallery::publish_date.le(from))
-                    .and(gallery::score.gt(0.0)),
+                    .and(gallery::score.ne(-1.0))
+                    .and(gallery::votes.ne("[]")),
             )
             .order_by(ordering)
             .offset(offset - 1)

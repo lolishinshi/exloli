@@ -55,7 +55,7 @@ async fn upload_gallery(message: &Update, urls: &[String]) -> Result<Message> {
     ))?)
 }
 
-async fn delete_gallery(message: &Update) -> Result<Message> {
+async fn delete_gallery(message: &Update, real: bool) -> Result<Message> {
     info!("执行：/delete");
     let to_del = message.update.reply_to_message().context("找不到回复")?;
     let channel = to_del.forward_from_chat().context("获取来源对话失败")?;
@@ -64,8 +64,11 @@ async fn delete_gallery(message: &Update) -> Result<Message> {
         .context("获取转发来源失败")?;
     send!(BOT.delete_message(to_del.chat.id, to_del.id))?;
     send!(BOT.delete_message(channel.id, *mes_id))?;
-    DB.delete_gallery_by_message_id(*mes_id)?;
     let gallery = DB.query_gallery_by_message_id(*mes_id)?;
+    match real {
+        false => DB.delete_gallery_by_message_id(*mes_id)?,
+        _ => DB.real_delete_gallery_by_message_id(*mes_id)?,
+    }
     Ok(send!(BOT.send_message(
         message.chat_id(),
         format!("画廊 {} 已删除", gallery.get_url())
@@ -226,7 +229,10 @@ async fn message_handler(message: Update) -> Result<()> {
             to_delete.push(full_gallery(&message, g).await?.id);
         }
         Ok(Delete) => {
-            to_delete.push(delete_gallery(&message).await?.id);
+            to_delete.push(delete_gallery(&message, false).await?.id);
+        }
+        Ok(RealDelete) => {
+            to_delete.push(delete_gallery(&message, true).await?.id);
         }
         Ok(Upload(urls)) => {
             to_delete.push(upload_gallery(&message, urls).await?.id);

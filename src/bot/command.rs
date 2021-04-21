@@ -23,6 +23,8 @@ pub enum RuaCommand {
     Ping,
     // 用该命令回复一条画廊以将其删除
     Delete,
+    // 这是真的删除，彻底删除
+    RealDelete,
     // 按评分高低查询一段时间内的本子，格式 /best 最少几天前 最多几天前 多少本
     Best([i64; 2]),
     // 用该命令回复一条画廊以上传其完整版本
@@ -87,6 +89,12 @@ impl RuaCommand {
                     return Err(WrongCommand("用法：请回复一个需要删除的画廊"));
                 }
                 Ok(Self::Delete)
+            }
+            ("real_delete", true) => {
+                if message.update.reply_to_gallery().is_none() {
+                    return Err(WrongCommand("用法：请回复一个需要彻底删除的画廊"));
+                }
+                Ok(Self::RealDelete)
             }
             ("upload", true) => {
                 let urls = get_exhentai_urls(message.update.text().unwrap_or_default());

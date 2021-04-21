@@ -95,32 +95,35 @@ impl ExLoli {
 
         // 判断是否上传过并且不需要更新
         let old_gallery = DB.query_gallery_by_title(&gallery.title);
-        if let Ok(g) = &old_gallery {
-            // 上传量已经达到限制的，不做更新
-            if g.upload_images as usize == CONFIG.exhentai.max_img_cnt && gallery.limit {
-                return Err(anyhow::anyhow!("NoNeedToUpdate"));
+        match &old_gallery {
+            Ok(g) => {
+                // 上传量已经达到限制的，不做更新
+                if g.upload_images as usize == CONFIG.exhentai.max_img_cnt && gallery.limit {
+                    return Err(anyhow::anyhow!("NoNeedToUpdate"));
+                }
+                // FIXME: 如果只是修改而不是增加了图片的画廊会被认为重复而不进行更新
+                // 如果已上传所有图片，则不进行更新
+                if gallery.img_pages.len() == g.upload_images as usize {
+                    return Err(anyhow::anyhow!(
+                        "该画廊已存在：{}",
+                        get_message_url(g.message_id)
+                    ));
+                }
+                // FIXME: 当前判断方法可能会误判，而且修改最大图片数量以后会失效
+                // 如果曾经更新过完整版，则继续上传完整版
+                if g.upload_images as usize > CONFIG.exhentai.max_img_cnt {
+                    gallery.limit = false;
+                }
+                // outdate 天以内上传过的，不重复发，在原消息的基础上更新
+                let outdate = CONFIG.exhentai.outdate.unwrap_or(7);
+                if g.publish_date + Duration::days(outdate) > Utc::today().naive_utc() {
+                    info!("找到历史上传：{}", g.message_id);
+                    return self.update_gallery(&g, Some(gallery)).await;
+                } else {
+                    info!("历史上传已过期：{}", g.message_id);
+                }
             }
-            // FIXME: 如果只是修改而不是增加了图片的画廊会被认为重复而不进行更新
-            // 如果已上传所有图片，则不进行更新
-            if gallery.img_pages.len() == g.upload_images as usize {
-                return Err(anyhow::anyhow!(
-                    "该画廊已存在：{}",
-                    get_message_url(g.message_id)
-                ));
-            }
-            // FIXME: 当前判断方法可能会误判，而且修改最大图片数量以后会失效
-            // 如果曾经更新过完整版，则继续上传完整版
-            if g.upload_images as usize > CONFIG.exhentai.max_img_cnt {
-                gallery.limit = false;
-            }
-            // outdate 天以内上传过的，不重复发，在原消息的基础上更新
-            let outdate = CONFIG.exhentai.outdate.unwrap_or(7);
-            if g.publish_date + Duration::days(outdate) > Utc::today().naive_utc() {
-                info!("找到历史上传：{}", g.message_id);
-                return self.update_gallery(&g, Some(gallery)).await;
-            } else {
-                info!("历史上传已过期：{}", g.message_id);
-            }
+            Err(e) => error!("没有找到历史上传：{}", e),
         }
 
         let img_urls = gallery.upload_images_to_telegraph().await?;
