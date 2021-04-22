@@ -181,17 +181,9 @@ impl<'a> FullGalleryInfo<'a> {
         let get_url = |url: String| async move {
             update_progress();
             for _ in 0..5i32 {
-                let result = self.upload_image(&url).await;
-                match result {
-                    Ok(v) => match DB.insert_image(&url, &v) {
-                        Err(e) => {
-                            error!("插入图片地址失败：{}", e);
-                        }
-                        _ => return Ok(v),
-                    },
-                    Err(e) => {
-                        error!("获取图片地址失败：{}", e);
-                    }
+                match self.upload_image(&url).await {
+                    Ok(v) => return Ok(v),
+                    Err(e) => error!("获取图片地址失败：{}", e),
                 }
                 sleep(Duration::from_secs(10)).await;
             }
@@ -215,10 +207,6 @@ impl<'a> FullGalleryInfo<'a> {
     /// 上传指定的图片并返回上传后的地址
     pub async fn upload_image(&self, url: &str) -> Result<String> {
         debug!("获取图片真实地址中：{}", url);
-        if let Ok(image) = DB.query_image_by_url(url) {
-            trace!("找到缓存!");
-            return Ok(image.url);
-        }
         let response = send!(self.client.get(url))?;
         trace!("状态码: {}", response.status());
 
@@ -226,9 +214,20 @@ impl<'a> FullGalleryInfo<'a> {
             .xpath_text(r#"//img[@id="img"]/@src"#)?
             .swap_remove(0);
 
+        if let Ok(image) = DB.query_image_by_url(&url) {
+            trace!("找到缓存!");
+            return Ok(image.url);
+        }
+
         debug!("下载图片中：{}", &url);
+
         // TODO: 是否有必要创建新的 client？
-        let client = Client::builder().timeout(Duration::from_secs(30)).build()?;
+        let mut client_builder = Client::builder().timeout(Duration::from_secs(30));
+        if let Some(proxy) = &CONFIG.telegraph.proxy {
+            client_builder = client_builder.proxy(Proxy::all(proxy)?);
+        }
+        let client = client_builder.build()?;
+
         let bytes = client.get(&url).send().and_then(Response::bytes).await?;
         let mut tmp = NamedTempFile::new()?;
         tmp.write_all(bytes.as_ref())?;
@@ -238,7 +237,12 @@ impl<'a> FullGalleryInfo<'a> {
         let mut result = Telegraph::upload_with(&[file], &client)
             .await
             .map_err(|e| anyhow!("上传 telegraph 失败：{}", e))?;
-        Ok(result.swap_remove(0).src)
+        let ret = result.swap_remove(0).src;
+
+        debug!("记录缓存...");
+        DB.insert_image(&url, &ret)?;
+
+        Ok(ret)
     }
 
     pub fn title(&self) -> &str {

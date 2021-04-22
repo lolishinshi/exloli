@@ -15,9 +15,8 @@ table! {
 }
 
 table! {
-    images (gallery_id, number) {
-        gallery_id -> Integer,
-        number -> Integer,
+    images (fileindex) {
+        fileindex -> Integer,
         url -> Text,
     }
 }

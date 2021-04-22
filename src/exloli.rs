@@ -93,7 +93,7 @@ impl ExLoli {
 
         let mut gallery = basic_info.clone().into_full_info().await?;
 
-        // 判断是否上传过并且不需要更新
+        // 判断是否上传过历史版本并且不需要更新
         let old_gallery = DB.query_gallery_by_title(&gallery.title);
         match &old_gallery {
             Ok(g) => {
@@ -101,29 +101,28 @@ impl ExLoli {
                 if g.upload_images as usize == CONFIG.exhentai.max_img_cnt && gallery.limit {
                     return Err(anyhow::anyhow!("NoNeedToUpdate"));
                 }
-                // FIXME: 如果只是修改而不是增加了图片的画廊会被认为重复而不进行更新
-                // 如果已上传所有图片，则不进行更新
-                if gallery.img_pages.len() == g.upload_images as usize {
-                    return Err(anyhow::anyhow!(
-                        "该画廊已存在：{}",
-                        get_message_url(g.message_id)
-                    ));
-                }
+                // outdate 天以内上传过的，不重复发，在原消息的基础上更新
+                // 没有图片增删的，也不重复发送
+                let outdate = CONFIG.exhentai.outdate.unwrap_or(7);
+                let not_outdated =
+                    g.publish_date + Duration::days(outdate) > Utc::today().naive_utc();
+                let not_addimg =
+                    gallery.img_pages.len() == g.upload_images as usize && gallery.limit;
+
                 // FIXME: 当前判断方法可能会误判，而且修改最大图片数量以后会失效
                 // 如果曾经更新过完整版，则继续上传完整版
                 if g.upload_images as usize > CONFIG.exhentai.max_img_cnt {
                     gallery.limit = false;
                 }
-                // outdate 天以内上传过的，不重复发，在原消息的基础上更新
-                let outdate = CONFIG.exhentai.outdate.unwrap_or(7);
-                if g.publish_date + Duration::days(outdate) > Utc::today().naive_utc() {
+
+                if not_outdated || not_addimg {
                     info!("找到历史上传：{}", g.message_id);
                     return self.update_gallery(&g, Some(gallery)).await;
                 } else {
                     info!("历史上传已过期：{}", g.message_id);
                 }
             }
-            Err(e) => error!("没有找到历史上传：{}", e),
+            Err(e) => warn!("没有找到历史上传：{}", e),
         }
 
         let img_urls = gallery.upload_images_to_telegraph().await?;
@@ -137,8 +136,13 @@ impl ExLoli {
         // 不需要原地更新的旧本子，发布新消息
         let message = self.publish_to_telegram(&gallery, &page.url).await?;
 
-        if let Ok(g) = old_gallery {
-            DB.update_gallery(&g, &gallery, &page.url, message.id)
+        // 如果是旧画廊，则需要修改原来的记录
+        if old_gallery
+            .as_ref()
+            .map(|g| g.get_url() == gallery.url)
+            .unwrap_or(false)
+        {
+            DB.update_gallery(&old_gallery.unwrap(), &gallery, &page.url, message.id)
         } else {
             DB.insert_gallery(&gallery, page.url, message.id)
         }

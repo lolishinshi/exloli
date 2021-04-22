@@ -1,7 +1,8 @@
 use crate::trans::TRANS;
 use crate::CONFIG;
+use once_cell::sync::Lazy;
+use regex::Regex;
 use std::borrow::Cow;
-use std::str::FromStr;
 use std::time::SystemTime;
 
 /// 将图片地址格式化为 html
@@ -64,14 +65,12 @@ pub fn get_id_from_gallery(url: &str) -> (i32, String) {
 }
 
 /// 从图片 url 中获取数字格式的 id，第一个为 id，第二个为图片序号
-pub fn get_id_from_image(url: &str) -> (i32, i32) {
-    let tmp = url.split('/').nth(5).unwrap();
-    let ids = tmp
-        .split('-')
-        .map(i32::from_str)
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
-    (ids[0], ids[1])
+/// 图片格式示例：
+/// https://bhoxhym.oddgxmtpzgse.hath.network/h/33f789fab8ecb4667521e6b1ad3b201936a96415-382043-1280-1817-jpg/keystamp=1619024700-fff70cfa32;fileindex=91876552;xres=2400/00000000.jpg
+pub fn get_id_from_image(url: &str) -> Option<i32> {
+    static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"fileindex=(\d+)").unwrap());
+    let caps = RE.captures(url)?;
+    caps.get(1).and_then(|s| s.as_str().parse::<i32>().ok())
 }
 
 /// 根据消息 id 生成当前频道的消息直链

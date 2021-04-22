@@ -32,6 +32,7 @@ pub struct Telegraph {
     pub access_token: String,
     pub author_name: String,
     pub author_url: String,
+    pub proxy: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

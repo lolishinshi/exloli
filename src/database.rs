@@ -29,8 +29,7 @@ pub struct Gallery {
 #[derive(Queryable, Insertable)]
 #[table_name = "images"]
 pub struct Image {
-    pub gallery_id: i32,
-    pub number: i32,
+    pub fileindex: i32,
     pub url: String,
 }
 
@@ -57,11 +56,10 @@ impl DataBase {
     }
 
     pub fn insert_image(&self, image_url: &str, uploaded_url: &str) -> Result<()> {
-        let (id, number) = get_id_from_image(image_url);
+        let fileindex = get_id_from_image(image_url).ok_or(anyhow!("fileindex 提取失败"))?;
         let img = Image {
-            gallery_id: id,
-            number,
             url: uploaded_url.to_owned(),
+            fileindex,
         };
         diesel::insert_or_ignore_into(images::table)
             .values(&img)
@@ -70,9 +68,9 @@ impl DataBase {
     }
 
     pub fn query_image_by_url(&self, image_url: &str) -> Result<Image> {
-        let (id, number) = get_id_from_image(image_url);
+        let fileindex = get_id_from_image(image_url).ok_or(anyhow!("fileindex 提取失败"))?;
         Ok(images::table
-            .filter(images::gallery_id.eq(id).and(images::number.eq(number)))
+            .filter(images::fileindex.eq(fileindex))
             .get_result::<Image>(&self.pool.get()?)?)
     }
 
