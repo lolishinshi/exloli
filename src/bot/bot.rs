@@ -11,8 +11,12 @@ use tokio_stream::wrappers::UnboundedReceiverStream;
 
 type Update = UpdateWithCx<Bot, Message>;
 
-async fn send_pool(message: &Update) -> Result<()> {
+async fn on_new_gallery(message: &Update) -> Result<()> {
     info!("频道消息更新，发送投票");
+    // 辣鸡 tg 安卓客户端在置顶消息过多时似乎在进群时会卡住
+    send!(BOT
+        .unpin_chat_message(message.update.chat.id)
+        .message_id(message.update.id))?;
     let options = vec![
         "我瞎了".into(),
         "不咋样".into(),
@@ -35,7 +39,7 @@ async fn send_pool(message: &Update) -> Result<()> {
 }
 
 /// 响应 /upload 命令，根据 url 上传指定画廊
-async fn upload_gallery(message: &Update, urls: &[String]) -> Result<Message> {
+async fn cmd_upload(message: &Update, urls: &[String]) -> Result<Message> {
     info!("执行：/upload {:?}", urls);
     let mut text = "收到命令，上传中……".to_owned();
     let mut reply_message = send!(message.reply_to(&text))?;
@@ -55,7 +59,7 @@ async fn upload_gallery(message: &Update, urls: &[String]) -> Result<Message> {
     ))?)
 }
 
-async fn delete_gallery(message: &Update, real: bool) -> Result<Message> {
+async fn cmd_delete(message: &Update, real: bool) -> Result<Message> {
     info!("执行：/delete");
     let to_del = message.update.reply_to_message().context("找不到回复")?;
     let channel = to_del.forward_from_chat().context("获取来源对话失败")?;
@@ -75,7 +79,7 @@ async fn delete_gallery(message: &Update, real: bool) -> Result<Message> {
     ))?)
 }
 
-async fn full_gallery(message: &Update, galleries: &[Gallery]) -> Result<Message> {
+async fn cmd_full(message: &Update, galleries: &[Gallery]) -> Result<Message> {
     info!("执行：/full");
     let mut text = "收到命令，上传完整版本中...".to_owned();
     let mut reply_message = send!(message.reply_to(&text))?;
@@ -95,7 +99,7 @@ async fn full_gallery(message: &Update, galleries: &[Gallery]) -> Result<Message
     ))?)
 }
 
-async fn update_tag(message: &Update, galleries: &[Gallery]) -> Result<Message> {
+async fn cmd_update_tag(message: &Update, galleries: &[Gallery]) -> Result<Message> {
     info!("执行：/update_tag");
     let mut text = "收到命令，更新 tag 中...".to_owned();
     let mut reply_message = send!(message.reply_to(&text))?;
@@ -125,9 +129,9 @@ fn query_best_text(from: i64, to: i64, offset: i64) -> Result<String> {
         .iter()
         .map(|g| {
             format!(
-                r#"<a href="{}">{:.2} - {}</a>"#,
-                get_message_url(g.message_id),
+                r#"<code>{:.2}</code> - <a href="{}">{}</a>"#,
                 g.score * 100.,
+                get_message_url(g.message_id),
                 g.title
             )
         })
@@ -159,7 +163,7 @@ fn query_best_keyboard(from: i64, to: i64, offset: i64) -> InlineKeyboardMarkup 
     ]])
 }
 
-async fn query_best(message: &Update, from: i64, to: i64) -> Result<Message> {
+async fn cmd_best(message: &Update, from: i64, to: i64) -> Result<Message> {
     info!("执行：/best {} {}", from, to);
     let text = query_best_text(from, to, 1)?;
     let reply_markup = query_best_keyboard(from, to, 1);
@@ -170,7 +174,7 @@ async fn query_best(message: &Update, from: i64, to: i64) -> Result<Message> {
 }
 
 /// 查询画廊，若失败则返回失败消息，成功则直接发送
-async fn query_gallery(message: &Update, urls: &[String]) -> Result<Message> {
+async fn cmd_query(message: &Update, urls: &[String]) -> Result<Message> {
     let text = urls
         .iter()
         .map(|url| {
@@ -180,6 +184,17 @@ async fn query_gallery(message: &Update, urls: &[String]) -> Result<Message> {
         })
         .collect::<Vec<_>>()
         .join("\n");
+    Ok(send!(message.reply_to(text))?)
+}
+
+async fn cmd_info(message: &Update, gallery: &Gallery) -> Result<Message> {
+    let text = format!(
+        "标题：{}\n地址：{}\n评分：{:.2}\n上传日期：{}",
+        gallery.title,
+        gallery.get_url(),
+        gallery.score,
+        gallery.publish_date,
+    );
     Ok(send!(message.reply_to(text))?)
 }
 
@@ -205,9 +220,9 @@ async fn message_handler(message: Update) -> Result<()> {
 
     trace!("{:#?}", message.update);
 
-    // 如果是新本子上传的消息，则回复投票
+    // 如果是新本子上传的消息，则回复投票并取消置顶
     if is_new_gallery(&message.update) && message.update.is_from_my_group() {
-        send_pool(&message).await.log_on_error().await;
+        on_new_gallery(&message).await.log_on_error().await;
     }
 
     // 其他命令
@@ -226,32 +241,35 @@ async fn message_handler(message: Update) -> Result<()> {
             to_delete.push(send!(message.reply_to("pong"))?.id);
         }
         Ok(Full(g)) => {
-            to_delete.push(full_gallery(&message, g).await?.id);
+            to_delete.push(cmd_full(&message, g).await?.id);
         }
         Ok(Delete) => {
-            to_delete.push(delete_gallery(&message, false).await?.id);
+            to_delete.push(cmd_delete(&message, false).await?.id);
         }
         Ok(RealDelete) => {
-            to_delete.push(delete_gallery(&message, true).await?.id);
+            to_delete.push(cmd_delete(&message, true).await?.id);
         }
         Ok(Upload(urls)) => {
-            to_delete.push(upload_gallery(&message, urls).await?.id);
+            to_delete.push(cmd_upload(&message, urls).await?.id);
         }
         Ok(UpdateTag(g)) => {
-            to_delete.push(update_tag(&message, g).await?.id);
+            to_delete.push(cmd_update_tag(&message, g).await?.id);
         }
         Ok(Query(urls)) => {
-            query_gallery(&message, urls).await?;
+            cmd_query(&message, urls).await?;
         }
         Ok(Best([from, to])) => {
-            query_best(&message, *from, *to).await?;
+            cmd_best(&message, *from, *to).await?;
+        }
+        Ok(Info(g)) => {
+            cmd_info(&message, g).await?;
         }
         // 收到无效命令则立即返回
         Err(CommandError::NotACommand) => return Ok(()),
     }
 
     // 对 query 和 best 命令的调用保留
-    if matches!(cmd, Ok(Query(_)) | Ok(Best(_))) {
+    if matches!(cmd, Ok(Query(_)) | Ok(Best(_)) | Ok(Info(_))) {
         to_delete.clear();
     }
     // 没有直接回复画廊的 upload full update_tag 则保留

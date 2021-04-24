@@ -42,4 +42,4 @@ env_logger = "0.7.1"
 tokio-stream = "0.1.5"
 
 [patch.crates-io]
-teloxide-core = { git = "https://github.com/teloxide/teloxide-core" }
+teloxide-core = { git = "https://github.com/Aloxaf/teloxide-core", branch = "patch" }

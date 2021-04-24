@@ -1559,7 +1559,7 @@ dependencies = [
 [[package]]
 name = "teloxide-core"
 version = "0.2.2"
-source = "git+https://github.com/teloxide/teloxide-core#0892258897d8627ac2d50877fd3a0010d8ba2012"
+source = "git+https://github.com/Aloxaf/teloxide-core?branch=patch#2efef2f8e5b2c7dfd6597ddd8a1c384ff642d69b"
 dependencies = [
  "bytes 1.0.1",
  "derive_more",

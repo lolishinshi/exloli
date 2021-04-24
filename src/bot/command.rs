@@ -31,6 +31,8 @@ pub enum RuaCommand {
     Full(Vec<Gallery>),
     // 更新 tag
     UpdateTag(Vec<Gallery>),
+    // 查询画廊信息
+    Info(Gallery),
 }
 
 impl RuaCommand {
@@ -104,13 +106,23 @@ impl RuaCommand {
                     Ok(Self::Upload(urls))
                 }
             }
+            ("info", _) => {
+                if let Some(g) = message.update.reply_to_gallery() {
+                    return Ok(Self::Info(g));
+                }
+                let mut gallery = get_galleries(args);
+                if gallery.is_empty() {
+                    return Err(WrongCommand("用法：请回复一个需要查询的画廊"));
+                }
+                return Ok(Self::Info(gallery.swap_remove(0)));
+            }
             ("best", _) => match parse_command_best(args) {
                 Some(mut v) => {
                     v[0] = v[0].min(3650);
                     v[1] = v[1].min(3650);
                     Ok(RuaCommand::Best(v))
                 }
-                _ => Err(WrongCommand("用法：/best 起始时间 终止时间 最大数量")),
+                _ => Err(WrongCommand("用法：/best 起始时间 终止时间")),
             },
             ("query", _) => {
                 let urls = get_exhentai_urls(message.update.text().unwrap_or_default());
