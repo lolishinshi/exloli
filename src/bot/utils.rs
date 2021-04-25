@@ -2,13 +2,18 @@ use crate::database::Gallery;
 use crate::{BOT, CONFIG, DB};
 use cached::proc_macro::cached;
 use once_cell::sync::Lazy;
+use regex::Regex;
 use teloxide::prelude::*;
 use teloxide::types::*;
 use tokio::task::block_in_place;
 use uuid::Uuid;
 
-pub static EXHENTAI_URL: Lazy<regex::Regex> =
-    Lazy::new(|| regex::Regex::new(r"https://e.hentai\.org/g/\d+/[0-9a-f]+/?").unwrap());
+pub static EXHENTAI_URL: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"https://e.hentai\.org/g/\d+/[0-9a-f]+/?").unwrap());
+pub static MESSAGE_URL: Lazy<Regex> = Lazy::new(|| {
+    let channel_id = &CONFIG.telegram.channel_id;
+    Regex::new(&format!(r"https://t.me/{}/(\d+)", channel_id)).unwrap()
+});
 
 #[macro_export]
 macro_rules! send {

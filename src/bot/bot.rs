@@ -79,12 +79,19 @@ async fn cmd_delete(message: &Update, real: bool) -> Result<Message> {
     ))?)
 }
 
-async fn cmd_full(message: &Update, galleries: &[Gallery]) -> Result<Message> {
+async fn cmd_full(message: &Update, galleries: &[InputGallery]) -> Result<Message> {
     info!("执行：/full");
     let mut text = "收到命令，上传完整版本中...".to_owned();
     let mut reply_message = send!(message.reply_to(&text))?;
     for (idx, gallery) in galleries.iter().enumerate() {
-        match EXLOLI.update_gallery(gallery, None).await {
+        let gallery = match gallery.to_gallery() {
+            Ok(v) => v,
+            Err(_) => {
+                text.push_str(&format!("\n第 {} 本，不存在", idx + 1));
+                continue;
+            }
+        };
+        match EXLOLI.update_gallery(&gallery, None).await {
             Ok(_) => text.push_str(&format!("\n第 {} 本，上传成功", idx + 1)),
             Err(e) => text.push_str(&format!("\n第 {} 本，上传失败：{}", idx + 1, e)),
         }
@@ -99,11 +106,18 @@ async fn cmd_full(message: &Update, galleries: &[Gallery]) -> Result<Message> {
     ))?)
 }
 
-async fn cmd_update_tag(message: &Update, galleries: &[Gallery]) -> Result<Message> {
+async fn cmd_update_tag(message: &Update, galleries: &[InputGallery]) -> Result<Message> {
     info!("执行：/update_tag");
     let mut text = "收到命令，更新 tag 中...".to_owned();
     let mut reply_message = send!(message.reply_to(&text))?;
     for (idx, gallery) in galleries.iter().enumerate() {
+        let gallery = match gallery.to_gallery() {
+            Ok(v) => v,
+            Err(_) => {
+                text.push_str(&format!("\n第 {} 本，不存在", idx + 1));
+                continue;
+            }
+        };
         match EXLOLI.update_tag(&gallery, None).await {
             Ok(_) => text.push_str(&format!("\n第 {} 本，更新成功", idx + 1)),
             Err(e) => text.push_str(&format!("\n第 {} 本，更新失败：{}", idx + 1, e)),
@@ -174,30 +188,35 @@ async fn cmd_best(message: &Update, from: i64, to: i64) -> Result<Message> {
 }
 
 /// 查询画廊，若失败则返回失败消息，成功则直接发送
-async fn cmd_query(message: &Update, urls: &[String]) -> Result<Message> {
-    let text = urls
-        .iter()
-        .map(|url| {
-            DB.query_gallery_by_url(url)
-                .map(|g| get_message_url(g.message_id))
-                .unwrap_or_else(|_| "未找到！".to_owned())
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
+async fn cmd_query(message: &Update, gs: &[InputGallery]) -> Result<Message> {
+    let text = match gs.len() {
+        1 => gs[0]
+            .to_gallery()
+            .and_then(|g| cmd_query_rank(&g))
+            .unwrap_or_else(|_| "未找到！".to_owned()),
+        _ => gs
+            .iter()
+            .map(|g| {
+                g.to_gallery()
+                    .map(|g| get_message_url(g.message_id))
+                    .unwrap_or_else(|_| "未找到！".to_owned())
+            })
+            .collect::<Vec<_>>()
+            .join("\n"),
+    };
     Ok(send!(message.reply_to(text))?)
 }
 
-async fn cmd_info(message: &Update, gallery: &Gallery) -> Result<Message> {
+fn cmd_query_rank(gallery: &Gallery) -> Result<String> {
     let rank = DB.get_rank(gallery.score)?;
-    let text = format!(
+    Ok(format!(
         "标题：{}\n地址：{}\n评分：{:.2}\n位置：{:.2}%\n上传日期：{}",
         gallery.title,
         gallery.get_url(),
         gallery.score * 100.,
         (rank.0 as f32 / rank.1 as f32 * 100.),
         gallery.publish_date,
-    );
-    Ok(send!(message.reply_to(text))?)
+    ))
 }
 
 /// 判断是否是新本子的发布信息
@@ -257,21 +276,18 @@ async fn message_handler(message: Update) -> Result<()> {
         Ok(UpdateTag(g)) => {
             to_delete.push(cmd_update_tag(&message, g).await?.id);
         }
-        Ok(Query(urls)) => {
-            cmd_query(&message, urls).await?;
+        Ok(Query(gs)) => {
+            cmd_query(&message, gs).await?;
         }
         Ok(Best([from, to])) => {
             cmd_best(&message, *from, *to).await?;
-        }
-        Ok(Info(g)) => {
-            cmd_info(&message, g).await?;
         }
         // 收到无效命令则立即返回
         Err(CommandError::NotACommand) => return Ok(()),
     }
 
     // 对 query 和 best 命令的调用保留
-    if matches!(cmd, Ok(Query(_)) | Ok(Best(_)) | Ok(Info(_))) {
+    if matches!(cmd, Ok(Query(_)) | Ok(Best(_))) {
         to_delete.clear();
     }
     // 没有直接回复画廊的 upload full update_tag 则保留
