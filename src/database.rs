@@ -171,12 +171,24 @@ impl DataBase {
                     .ge(to)
                     .and(gallery::publish_date.le(from))
                     .and(gallery::score.ne(-1.0))
-                    .and(gallery::votes.ne("[]")),
+                    .and(gallery::poll_id.ne("")),
             )
             .order_by(ordering)
             .offset(offset - 1)
             .limit(20)
             .load::<Gallery>(&self.pool.get()?)?)
+    }
+
+    pub fn get_rank(&self, score: f32) -> Result<(i64, i64)> {
+        let pos = gallery::table
+            .filter(gallery::score.ge(score).and(gallery::poll_id.ne("")))
+            .count()
+            .get_result::<i64>(&self.pool.get()?)?;
+        let total = gallery::table
+            .filter(gallery::poll_id.ne(""))
+            .count()
+            .get_result::<i64>(&self.pool.get()?)?;
+        Ok((pos, total))
     }
 
     pub fn update_poll_id(&self, message_id: i32, poll_id: &str) -> Result<()> {

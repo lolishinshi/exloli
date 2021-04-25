@@ -188,11 +188,13 @@ async fn cmd_query(message: &Update, urls: &[String]) -> Result<Message> {
 }
 
 async fn cmd_info(message: &Update, gallery: &Gallery) -> Result<Message> {
+    let rank = DB.get_rank(gallery.score)?;
     let text = format!(
-        "标题：{}\n地址：{}\n评分：{:.2}\n上传日期：{}",
+        "标题：{}\n地址：{}\n评分：{:.2}\n位置：{:.2}%\n上传日期：{}",
         gallery.title,
         gallery.get_url(),
-        gallery.score,
+        gallery.score * 100.,
+        (rank.0 as f32 / rank.1 as f32 * 100.),
         gallery.publish_date,
     );
     Ok(send!(message.reply_to(text))?)
