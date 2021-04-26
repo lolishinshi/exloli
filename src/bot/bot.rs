@@ -81,24 +81,24 @@ async fn cmd_delete(message: &Update, real: bool) -> Result<Message> {
 
 async fn cmd_full(message: &Update, galleries: &[InputGallery]) -> Result<Message> {
     info!("执行：/full");
-    let mut text = "收到命令，上传完整版本中...".to_owned();
+    let mut text = "收到命令，更新完整版本中...".to_owned();
     let mut reply_message = send!(message.reply_to(&text))?;
     for (idx, gallery) in galleries.iter().enumerate() {
         let gallery = match gallery.to_gallery() {
             Ok(v) => v,
             Err(_) => {
-                text.push_str(&format!("\n第 {} 本，不存在", idx + 1));
+                text.push_str(&format!("\n第 {} 本，未上传", idx + 1));
                 continue;
             }
         };
         match EXLOLI.update_gallery(&gallery, None).await {
-            Ok(_) => text.push_str(&format!("\n第 {} 本，上传成功", idx + 1)),
-            Err(e) => text.push_str(&format!("\n第 {} 本，上传失败：{}", idx + 1, e)),
+            Ok(_) => text.push_str(&format!("\n第 {} 本，更新成功", idx + 1)),
+            Err(e) => text.push_str(&format!("\n第 {} 本，更新失败：{}", idx + 1, e)),
         }
         reply_message =
             send!(BOT.edit_message_text(reply_message.chat.id, reply_message.id, &text))?;
     }
-    text.push_str("\n上传完毕！");
+    text.push_str("\n更新完毕！");
     Ok(send!(BOT.edit_message_text(
         reply_message.chat.id,
         reply_message.id,
@@ -114,7 +114,7 @@ async fn cmd_update_tag(message: &Update, galleries: &[InputGallery]) -> Result<
         let gallery = match gallery.to_gallery() {
             Ok(v) => v,
             Err(_) => {
-                text.push_str(&format!("\n第 {} 本，不存在", idx + 1));
+                text.push_str(&format!("\n第 {} 本，未上传", idx + 1));
                 continue;
             }
         };
@@ -210,11 +210,12 @@ async fn cmd_query(message: &Update, gs: &[InputGallery]) -> Result<Message> {
 fn cmd_query_rank(gallery: &Gallery) -> Result<String> {
     let rank = DB.get_rank(gallery.score)?;
     Ok(format!(
-        "标题：{}\n地址：{}\n评分：{:.2}\n位置：{:.2}%\n上传日期：{}",
+        "标题：{}\n消息：{}\n地址：{}\n评分：{:.2}\n位置：{:.2}%\n上传日期：{}",
         gallery.title,
+        get_message_url(gallery.message_id),
         gallery.get_url(),
         gallery.score * 100.,
-        (rank.0 as f32 / rank.1 as f32 * 100.),
+        rank * 100.,
         gallery.publish_date,
     ))
 }
@@ -325,8 +326,8 @@ async fn inline_handler(query: UpdateWithCx<Bot, InlineQuery>) -> Result<()> {
     let mut answer = vec![];
     if EXHENTAI_URL.is_match(text) {
         if let Ok(v) = DB.query_gallery_by_url(&query.update.query) {
-            let url = get_message_url(v.message_id);
-            answer.push(InlineQueryResult::Article(inline_article(v.title, url)));
+            let content = cmd_query_rank(&v)?;
+            answer.push(InlineQueryResult::Article(inline_article(v.title, content)));
         }
     }
     if answer.is_empty() {

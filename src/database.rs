@@ -3,6 +3,7 @@ use crate::schema::*;
 use crate::utils::{get_id_from_gallery, get_id_from_image};
 use anyhow::Result;
 use chrono::prelude::*;
+use diesel::dsl::sql;
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::sqlite::Sqlite;
@@ -110,6 +111,7 @@ impl DataBase {
         info: &FullGalleryInfo,
         telegraph: &str,
         message_id: i32,
+        upload_images: usize,
     ) -> Result<()> {
         debug!("更新画廊数据");
         let (gallery_id, token) = get_id_from_gallery(&info.url);
@@ -122,7 +124,7 @@ impl DataBase {
                 gallery::message_id.eq(message_id),
                 gallery::telegraph.eq(telegraph),
                 gallery::tags.eq(serde_json::to_string(&info.tags)?),
-                gallery::upload_images.eq(info.get_image_lists().len() as i16),
+                gallery::upload_images.eq(upload_images as i16),
             ))
             .execute(&self.pool.get()?)?;
         // 如果这次更新发布了新消息，那么需要同时更改发布日期
@@ -181,16 +183,14 @@ impl DataBase {
             .load::<Gallery>(&self.pool.get()?)?)
     }
 
-    pub fn get_rank(&self, score: f32) -> Result<(i64, i64)> {
-        let pos = gallery::table
-            .filter(gallery::score.ge(score).and(gallery::poll_id.ne("")))
-            .count()
-            .get_result::<i64>(&self.pool.get()?)?;
-        let total = gallery::table
-            .filter(gallery::poll_id.ne(""))
-            .count()
-            .get_result::<i64>(&self.pool.get()?)?;
-        Ok((pos, total))
+    pub fn get_rank(&self, score: f32) -> Result<f32> {
+        Ok(gallery::table
+            .filter(gallery::poll_id.ne("").and(gallery::score.ge(0.0)))
+            .select(sql(&format!(
+                "sum(IIF(score >= {}, 1., 0.)) / count(*)",
+                score
+            )))
+            .get_result::<f32>(&self.pool.get()?)?)
     }
 
     pub fn update_poll_id(&self, message_id: i32, poll_id: &str) -> Result<()> {

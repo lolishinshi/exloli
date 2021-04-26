@@ -142,7 +142,13 @@ impl ExLoli {
             .map(|g| g.get_url() == gallery.url)
             .unwrap_or(false)
         {
-            DB.update_gallery(&old_gallery.unwrap(), &gallery, &page.url, message.id)
+            DB.update_gallery(
+                &old_gallery.unwrap(),
+                &gallery,
+                &page.url,
+                message.id,
+                img_urls.len(),
+            )
         } else {
             DB.insert_gallery(&gallery, page.url, message.id)
         }
@@ -180,7 +186,8 @@ impl ExLoli {
             .edit_telegraph(extract_telegraph_path(&ogallery.telegraph), title, &content)
             .await?;
         let url = format!("{}?_={}", page.url, get_timestamp());
-        self.update_message(ogallery, &gallery, &url).await
+        self.update_message(ogallery, &gallery, &url, img_urls.len())
+            .await
     }
 
     /// 更新 tag
@@ -218,7 +225,8 @@ impl ExLoli {
             )
             .await?;
 
-        self.update_message(&old_gallery, &new_gallery, &new_page.url)
+        let upload_images = old_gallery.upload_images as usize;
+        self.update_message(&old_gallery, &new_gallery, &new_page.url, upload_images)
             .await
     }
 
@@ -228,6 +236,7 @@ impl ExLoli {
         old_gallery: &Gallery,
         gallery: &FullGalleryInfo<'a>,
         article: &str,
+        upload_images: usize,
     ) -> Result<()> {
         info!("更新 Telegram 频道消息");
         let text = Self::get_message_string(gallery, article);
@@ -241,7 +250,7 @@ impl ExLoli {
             .send()
             .await
         {
-            Ok(mes) => DB.update_gallery(&old_gallery, &gallery, article, mes.id),
+            Ok(mes) => DB.update_gallery(&old_gallery, &gallery, article, mes.id, upload_images),
             Err(e) => Err(e.into()),
         }
     }
