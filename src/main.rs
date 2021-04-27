@@ -36,8 +36,8 @@ static CONFIG: Lazy<Config> = Lazy::new(|| {
     let config_file = config_file.as_deref().unwrap_or("config.toml");
     Config::new(config_file).expect("配置文件解析失败")
 });
-// TODO: Use AutoSend ??
-static BOT: Lazy<Bot> = Lazy::new(|| teloxide::Bot::new(&CONFIG.telegram.token));
+static BOT: Lazy<AutoSend<Bot>> =
+    Lazy::new(|| teloxide::Bot::new(&CONFIG.telegram.token).auto_send());
 static DB: Lazy<DataBase> = Lazy::new(DataBase::init);
 static EXLOLI: Lazy<ExLoli> = Lazy::new(|| block_on(ExLoli::new()).expect("登录失败"));
 

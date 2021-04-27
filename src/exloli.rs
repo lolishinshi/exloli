@@ -3,7 +3,7 @@ use crate::exhentai::*;
 use crate::utils::*;
 use crate::{BOT, CONFIG, DB};
 use anyhow::Result;
-use chrono::{Duration, Timelike, Utc};
+use chrono::{Datelike, Duration, Timelike, Utc};
 use futures::TryFutureExt;
 use telegraph_rs::{html_to_node, Page, Telegraph};
 use teloxide::prelude::*;
@@ -58,11 +58,11 @@ impl ExLoli {
         let now = Utc::now();
         let duration = Utc::today().naive_utc() - g.publish_date;
         // 已删除画廊不更新
-        // 7 天前发的本子不更新
-        // 两天前的本子，逢 4 小时更新
         if (g.score - -1.0).abs() < f32::EPSILON
-            || duration.num_days() > 7
-            || (duration.num_days() > 2 && now.hour() % 4 != 0)
+            // 7 天前的本子，如果是同一 weekday 发的则更新
+            || !(duration.num_days() > 7 && now.weekday() == g.publish_date.weekday() && now.hour() % 8 == 0)
+            // 两天前的本子，每 4 小时更新一次
+            || !(duration.num_days() > 2 && now.hour() % 4 == 0)
         {
             return Ok(());
         }
@@ -94,7 +94,7 @@ impl ExLoli {
         let mut gallery = basic_info.clone().into_full_info().await?;
 
         // 判断是否上传过历史版本并且不需要更新
-        let old_gallery = DB.query_gallery_by_title(&gallery.title);
+        let old_gallery = self.get_history_upload(&gallery).await;
         match &old_gallery {
             Ok(g) => {
                 // 上传量已经达到限制的，不做更新
@@ -129,7 +129,11 @@ impl ExLoli {
 
         // 上传到 telegraph
         let title = gallery.title();
-        let content = Self::get_article_string(&img_urls, gallery.img_pages.len(), None);
+        let content = Self::get_article_string(
+            &img_urls,
+            gallery.img_pages.len(),
+            old_gallery.as_ref().ok().map(|g| g.upload_images as usize),
+        );
         let page = self.publish_to_telegraph(title, &content).await?;
         info!("文章地址: {}", page.url);
 
@@ -317,5 +321,23 @@ impl ExLoli {
             content.push_str("</p>");
         }
         content
+    }
+}
+
+impl ExLoli {
+    /// 获取画廊的历史上传
+    async fn get_history_upload<'a>(&self, gallery: &FullGalleryInfo<'a>) -> Result<Gallery> {
+        let mut parent = gallery.parent.clone();
+        while let Some(url) = &parent {
+            match DB.query_gallery_by_url(url) {
+                Ok(v) => return Ok(v),
+                _ => {
+                    let parent_gallery = self.exhentai.get_gallery_by_url(url).await?;
+                    let parent_gallery = parent_gallery.into_full_info().await?;
+                    parent = parent_gallery.parent;
+                }
+            }
+        }
+        Err(anyhow!("Not Found"))
     }
 }

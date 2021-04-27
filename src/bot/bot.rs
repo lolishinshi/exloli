@@ -1,4 +1,4 @@
-use super::utils::*;
+use super::utils::{Update, *};
 use crate::bot::command::*;
 use crate::database::Gallery;
 use crate::utils::get_message_url;
@@ -9,14 +9,13 @@ use std::convert::TryInto;
 use teloxide::types::*;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
-type Update = UpdateWithCx<Bot, Message>;
-
-async fn on_new_gallery(message: &Update) -> Result<()> {
+// TODO: 新本子继承父画廊的投票？
+async fn on_new_gallery(message: &Update<Message>) -> Result<()> {
     info!("频道消息更新，发送投票");
     // 辣鸡 tg 安卓客户端在置顶消息过多时似乎在进群时会卡住
-    send!(BOT
-        .unpin_chat_message(message.update.chat.id)
-        .message_id(message.update.id))?;
+    BOT.unpin_chat_message(message.update.chat.id)
+        .message_id(message.update.id)
+        .await?;
     let options = vec![
         "我瞎了".into(),
         "不咋样".into(),
@@ -24,14 +23,15 @@ async fn on_new_gallery(message: &Update) -> Result<()> {
         "不错哦".into(),
         "太棒了".into(),
     ];
-    let poll = send!(BOT
+    let poll = BOT
         .send_poll(
             message.update.chat.id,
             "看完以后发表一下感想吧！",
             options,
-            PollType::Regular
+            PollType::Regular,
         )
-        .reply_to_message_id(message.update.id))?;
+        .reply_to_message_id(message.update.id)
+        .await?;
     let poll_id = poll.poll().unwrap().id.to_owned();
     let message_id = *message.update.forward_from_message_id().unwrap();
     debug!("投票：{} {}", message_id, poll_id);
@@ -39,50 +39,47 @@ async fn on_new_gallery(message: &Update) -> Result<()> {
 }
 
 /// 响应 /upload 命令，根据 url 上传指定画廊
-async fn cmd_upload(message: &Update, urls: &[String]) -> Result<Message> {
+async fn cmd_upload(message: &Update<Message>, urls: &[String]) -> Result<Message> {
     info!("执行：/upload {:?}", urls);
     let mut text = "收到命令，上传中……".to_owned();
-    let mut reply_message = send!(message.reply_to(&text))?;
+    let mut reply_message = message.reply_to(&text).await?;
     for (idx, url) in urls.iter().enumerate() {
         match EXLOLI.upload_gallery_by_url(&url).await {
             Ok(_) => text.push_str(&format!("\n第 {} 本 - 上传成功", idx + 1)),
             Err(e) => text.push_str(&format!("\n第 {} 本 - 上传失败：{}", idx + 1, e)),
         }
-        reply_message =
-            send!(BOT.edit_message_text(reply_message.chat.id, reply_message.id, &text))?;
+        reply_message = BOT
+            .edit_message_text(reply_message.chat.id, reply_message.id, &text)
+            .await?;
     }
     text.push_str("\n上传完毕！");
-    Ok(send!(BOT.edit_message_text(
-        reply_message.chat.id,
-        reply_message.id,
-        text
-    ))?)
+    Ok(BOT
+        .edit_message_text(reply_message.chat.id, reply_message.id, text)
+        .await?)
 }
 
-async fn cmd_delete(message: &Update, real: bool) -> Result<Message> {
-    info!("执行：/delete");
+async fn cmd_delete(message: &Update<Message>, real: bool) -> Result<Message> {
+    info!("执行：/delete {}", real);
     let to_del = message.update.reply_to_message().context("找不到回复")?;
     let channel = to_del.forward_from_chat().context("获取来源对话失败")?;
     let mes_id = to_del
         .forward_from_message_id()
         .context("获取转发来源失败")?;
-    send!(BOT.delete_message(to_del.chat.id, to_del.id))?;
-    send!(BOT.delete_message(channel.id, *mes_id))?;
+    BOT.delete_message(to_del.chat.id, to_del.id).await?;
+    BOT.delete_message(channel.id, *mes_id).await?;
     let gallery = DB.query_gallery_by_message_id(*mes_id)?;
     match real {
         false => DB.delete_gallery_by_message_id(*mes_id)?,
         _ => DB.real_delete_gallery_by_message_id(*mes_id)?,
     }
-    Ok(send!(BOT.send_message(
-        message.chat_id(),
-        format!("画廊 {} 已删除", gallery.get_url())
-    ))?)
+    let text = format!("画廊 {} 已删除", gallery.get_url());
+    Ok(BOT.send_message(message.chat_id(), text).await?)
 }
 
-async fn cmd_full(message: &Update, galleries: &[InputGallery]) -> Result<Message> {
+async fn cmd_full(message: &Update<Message>, galleries: &[InputGallery]) -> Result<Message> {
     info!("执行：/full");
     let mut text = "收到命令，更新完整版本中...".to_owned();
-    let mut reply_message = send!(message.reply_to(&text))?;
+    let mut reply_message = message.reply_to(&text).await?;
     for (idx, gallery) in galleries.iter().enumerate() {
         let gallery = match gallery.to_gallery() {
             Ok(v) => v,
@@ -95,21 +92,20 @@ async fn cmd_full(message: &Update, galleries: &[InputGallery]) -> Result<Messag
             Ok(_) => text.push_str(&format!("\n第 {} 本，更新成功", idx + 1)),
             Err(e) => text.push_str(&format!("\n第 {} 本，更新失败：{}", idx + 1, e)),
         }
-        reply_message =
-            send!(BOT.edit_message_text(reply_message.chat.id, reply_message.id, &text))?;
+        reply_message = BOT
+            .edit_message_text(reply_message.chat.id, reply_message.id, &text)
+            .await?;
     }
     text.push_str("\n更新完毕！");
-    Ok(send!(BOT.edit_message_text(
-        reply_message.chat.id,
-        reply_message.id,
-        text
-    ))?)
+    Ok(BOT
+        .edit_message_text(reply_message.chat.id, reply_message.id, text)
+        .await?)
 }
 
-async fn cmd_update_tag(message: &Update, galleries: &[InputGallery]) -> Result<Message> {
+async fn cmd_update_tag(message: &Update<Message>, galleries: &[InputGallery]) -> Result<Message> {
     info!("执行：/update_tag");
     let mut text = "收到命令，更新 tag 中...".to_owned();
-    let mut reply_message = send!(message.reply_to(&text))?;
+    let mut reply_message = message.reply_to(&text).await?;
     for (idx, gallery) in galleries.iter().enumerate() {
         let gallery = match gallery.to_gallery() {
             Ok(v) => v,
@@ -122,15 +118,14 @@ async fn cmd_update_tag(message: &Update, galleries: &[InputGallery]) -> Result<
             Ok(_) => text.push_str(&format!("\n第 {} 本，更新成功", idx + 1)),
             Err(e) => text.push_str(&format!("\n第 {} 本，更新失败：{}", idx + 1, e)),
         }
-        reply_message =
-            send!(BOT.edit_message_text(reply_message.chat.id, reply_message.id, &text))?;
+        reply_message = BOT
+            .edit_message_text(reply_message.chat.id, reply_message.id, &text)
+            .await?;
     }
     text.push_str("\n更新完毕！");
-    Ok(send!(BOT.edit_message_text(
-        reply_message.chat.id,
-        reply_message.id,
-        text
-    ))?)
+    Ok(BOT
+        .edit_message_text(reply_message.chat.id, reply_message.id, text)
+        .await?)
 }
 
 fn query_best_text(from: i64, to: i64, offset: i64) -> Result<String> {
@@ -177,18 +172,19 @@ fn query_best_keyboard(from: i64, to: i64, offset: i64) -> InlineKeyboardMarkup 
     ]])
 }
 
-async fn cmd_best(message: &Update, from: i64, to: i64) -> Result<Message> {
+async fn cmd_best(message: &Update<Message>, from: i64, to: i64) -> Result<Message> {
     info!("执行：/best {} {}", from, to);
     let text = query_best_text(from, to, 1)?;
     let reply_markup = query_best_keyboard(from, to, 1);
-    Ok(send!(message
+    Ok(message
         .reply_to(text)
         .reply_markup(reply_markup)
-        .parse_mode(ParseMode::Html))?)
+        .parse_mode(ParseMode::Html)
+        .await?)
 }
 
 /// 查询画廊，若失败则返回失败消息，成功则直接发送
-async fn cmd_query(message: &Update, gs: &[InputGallery]) -> Result<Message> {
+async fn cmd_query(message: &Update<Message>, gs: &[InputGallery]) -> Result<Message> {
     let text = match gs.len() {
         1 => gs[0]
             .to_gallery()
@@ -204,7 +200,7 @@ async fn cmd_query(message: &Update, gs: &[InputGallery]) -> Result<Message> {
             .collect::<Vec<_>>()
             .join("\n"),
     };
-    Ok(send!(message.reply_to(text))?)
+    Ok(message.reply_to(text).await?)
 }
 
 fn cmd_query_rank(gallery: &Gallery) -> Result<String> {
@@ -237,7 +233,7 @@ fn is_new_gallery(message: &Message) -> bool {
         .unwrap_or(false)
 }
 
-async fn message_handler(message: Update) -> Result<()> {
+async fn message_handler(message: Update<Message>) -> Result<()> {
     use RuaCommand::*;
 
     trace!("{:#?}", message.update);
@@ -254,13 +250,13 @@ async fn message_handler(message: Update) -> Result<()> {
         Err(CommandError::WrongCommand(help)) => {
             info!("错误的命令：{}", help);
             if !help.is_empty() {
-                to_delete.push(send!(message.reply_to(*help))?.id);
+                to_delete.push(message.reply_to(*help).await?.id);
             } else {
-                send!(message.delete_message())?;
+                message.delete_message().await?;
             }
         }
         Ok(Ping) => {
-            to_delete.push(send!(message.reply_to("pong"))?.id);
+            to_delete.push(message.reply_to("pong").await?.id);
         }
         Ok(Full(g)) => {
             to_delete.push(cmd_full(&message, g).await?.id);
@@ -304,14 +300,14 @@ async fn message_handler(message: Update) -> Result<()> {
         tokio::spawn(async move {
             sleep(time::Duration::from_secs(60)).await;
             for id in to_delete {
-                send!(BOT.delete_message(chat_id, id)).log_on_error().await;
+                BOT.delete_message(chat_id, id).await.log_on_error().await;
             }
         });
     }
     Ok(())
 }
 
-async fn poll_handler(poll: UpdateWithCx<Bot, Poll>) -> Result<()> {
+async fn poll_handler(poll: Update<Poll>) -> Result<()> {
     let options = poll.update.options;
     let votes = options.iter().map(|s| s.voter_count).collect::<Vec<_>>();
     let score = wilson_score(&votes);
@@ -320,7 +316,7 @@ async fn poll_handler(poll: UpdateWithCx<Bot, Poll>) -> Result<()> {
     DB.update_score(&poll.update.id, score, &votes)
 }
 
-async fn inline_handler(query: UpdateWithCx<Bot, InlineQuery>) -> Result<()> {
+async fn inline_handler(query: Update<InlineQuery>) -> Result<()> {
     let text = query.update.query.trim();
     info!("行内查询：{}", text);
     let mut answer = vec![];
@@ -336,11 +332,11 @@ async fn inline_handler(query: UpdateWithCx<Bot, InlineQuery>) -> Result<()> {
             "没有找到",
         )));
     }
-    send!(BOT.answer_inline_query(query.update.id, answer))?;
+    BOT.answer_inline_query(query.update.id, answer).await?;
     Ok(())
 }
 
-async fn callback_handler(callback: UpdateWithCx<Bot, CallbackQuery>) -> Result<()> {
+async fn callback_handler(callback: Update<CallbackQuery>) -> Result<()> {
     let update = callback.update;
     info!("回调：{:?}", update.data);
 
@@ -355,10 +351,10 @@ async fn callback_handler(callback: UpdateWithCx<Bot, CallbackQuery>) -> Result<
     let message = match update.message {
         Some(v) => v,
         None => {
-            send!(BOT
-                .answer_callback_query(update.id)
+            BOT.answer_callback_query(update.id)
                 .text("该消息过旧")
-                .show_alert(true))?;
+                .show_alert(true)
+                .await?;
             return Ok(());
         }
     };
@@ -382,10 +378,10 @@ async fn callback_handler(callback: UpdateWithCx<Bot, CallbackQuery>) -> Result<
             };
             let text = query_best_text(from, to, offset)?;
             let reply = query_best_keyboard(from, to, offset);
-            send!(BOT
-                .edit_message_text(message.chat.id, message.id, &text)
+            BOT.edit_message_text(message.chat.id, message.id, &text)
                 .parse_mode(ParseMode::Html)
-                .reply_markup(reply))?;
+                .reply_markup(reply)
+                .await?;
         }
         _ => error!("未知指令：{}", cmd),
     };
@@ -394,23 +390,24 @@ async fn callback_handler(callback: UpdateWithCx<Bot, CallbackQuery>) -> Result<
 
 pub async fn start_bot() {
     info!("BOT 启动");
+    type DispatcherHandler<T> = DispatcherHandlerRx<AutoSend<Bot>, T>;
     Dispatcher::new(BOT.clone())
-        .messages_handler(|rx: DispatcherHandlerRx<Bot, Message>| {
+        .messages_handler(|rx: DispatcherHandler<Message>| {
             UnboundedReceiverStream::new(rx).for_each_concurrent(8, |message| async {
                 message_handler(message).await.log_on_error().await;
             })
         })
-        .polls_handler(|rx: DispatcherHandlerRx<Bot, Poll>| {
+        .polls_handler(|rx: DispatcherHandler<Poll>| {
             UnboundedReceiverStream::new(rx).for_each_concurrent(8, |message| async {
                 poll_handler(message).await.log_on_error().await;
             })
         })
-        .inline_queries_handler(|rx: DispatcherHandlerRx<Bot, InlineQuery>| {
+        .inline_queries_handler(|rx: DispatcherHandler<InlineQuery>| {
             UnboundedReceiverStream::new(rx).for_each_concurrent(8, |message| async {
                 inline_handler(message).await.log_on_error().await;
             })
         })
-        .callback_queries_handler(|rx: DispatcherHandlerRx<Bot, CallbackQuery>| {
+        .callback_queries_handler(|rx: DispatcherHandler<CallbackQuery>| {
             UnboundedReceiverStream::new(rx).for_each_concurrent(8, |message| async {
                 callback_handler(message).await.log_on_error().await;
             })

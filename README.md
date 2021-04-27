@@ -25,8 +25,8 @@ config.toml 模板如下
 log_level = "INFO"
 # 图片下载并发数. 默认 4
 threads_num = 4
-# 每隔多少秒检查一次，默认半小时
-interval = 1800
+# 每隔多少秒检查一次，默认一小时
+interval = 3600
 # 数据库储存位置
 database_url = "db.sqlite"
 

@@ -72,6 +72,14 @@ impl<'a> BasicGalleryInfo<'a> {
             .map(|mut n| n.swap_remove(0))
             .ok();
 
+        // 父画廊
+        let parent = html
+            .xpath_text(r#"//tr[contains(./td[1]/text(), "Parent:")]/td[2]/a/@href"#)
+            .ok()
+            .map(|mut v| v.swap_remove(0));
+
+        debug!("父画廊：{:?}", parent);
+
         // 标签
         let mut tags = vec![];
         for ele in html
@@ -121,6 +129,7 @@ impl<'a> BasicGalleryInfo<'a> {
             client: self.client,
             url: self.url.clone(),
             limit: self.limit,
+            parent,
             title,
             title_jp,
             rating,
@@ -141,6 +150,8 @@ pub struct FullGalleryInfo<'a> {
     pub title_jp: Option<String>,
     /// 画廊地址
     pub url: String,
+    /// 父画廊地址
+    pub parent: Option<String>,
     /// 评分
     pub rating: String,
     /// 收藏次数

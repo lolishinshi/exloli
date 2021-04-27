@@ -3,7 +3,6 @@ use crate::database::Gallery;
 use crate::*;
 use std::convert::TryInto;
 use std::str::FromStr;
-use teloxide::prelude::UpdateWithCx;
 use teloxide::types::Message;
 
 pub enum CommandError {
@@ -50,7 +49,7 @@ pub enum RuaCommand {
 
 impl RuaCommand {
     /// 将消息解析为命令
-    pub fn parse(message: &UpdateWithCx<Bot, Message>, bot_id: &str) -> Result<Self, CommandError> {
+    pub fn parse(message: &Update<Message>, bot_id: &str) -> Result<Self, CommandError> {
         use CommandError::*;
 
         let text = message.update.text().unwrap_or("");
@@ -161,9 +160,6 @@ fn get_exhentai_urls(s: &str) -> Vec<String> {
 }
 
 fn get_input_gallery(message: &Message, s: &str) -> Vec<InputGallery> {
-    if let Some(g) = message.reply_to_gallery() {
-        return vec![InputGallery::Gallery(g)];
-    }
     let i1 = MESSAGE_URL.captures_iter(s).filter_map(|c| {
         c.get(1)
             .and_then(|s| s.as_str().parse::<i32>().ok())
@@ -174,5 +170,9 @@ fn get_input_gallery(message: &Message, s: &str) -> Vec<InputGallery> {
         c.get(0)
             .map(|s| InputGallery::ExHentaiUrl(s.as_str().to_owned()))
     });
-    i1.chain(i2).collect::<Vec<_>>()
+    let mut ret = i1.chain(i2).collect::<Vec<_>>();
+    if let (true, Some(g)) = (ret.is_empty(), message.reply_to_gallery()) {
+        ret.push(InputGallery::Gallery(g));
+    }
+    ret
 }

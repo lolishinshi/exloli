@@ -216,15 +216,6 @@ impl DataBase {
             .get_result::<Gallery>(&self.pool.get()?)?)
     }
 
-    /// 查询最近一次发布的符合标题的画廊
-    pub fn query_gallery_by_title(&self, title: &str) -> Result<Gallery> {
-        Ok(gallery::table
-            .filter(gallery::title.eq(title))
-            .order_by(gallery::gallery_id.desc())
-            .limit(1)
-            .get_result::<Gallery>(&self.pool.get()?)?)
-    }
-
     pub fn query_gallery_by_message_id(&self, message_id: i32) -> Result<Gallery> {
         Ok(gallery::table
             .filter(gallery::message_id.eq(message_id))
