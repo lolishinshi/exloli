@@ -262,7 +262,7 @@ async fn message_handler(message: Update<Message>) -> Result<()> {
             to_delete.push(cmd_full(&message, g).await?.id);
         }
         Ok(Delete) => {
-            to_delete.push(cmd_delete(&message, false).await?.id);
+            cmd_delete(&message, false).await?;
         }
         Ok(RealDelete) => {
             to_delete.push(cmd_delete(&message, true).await?.id);

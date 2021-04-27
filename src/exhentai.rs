@@ -27,7 +27,7 @@ macro_rules! set_header {
 
 macro_rules! send {
     ($e:expr) => {
-        $e.send().await
+        $e.send().await.and_then(Response::error_for_status)
     };
 }
 
@@ -64,7 +64,6 @@ impl<'a> BasicGalleryInfo<'a> {
     pub async fn into_full_info(self) -> Result<FullGalleryInfo<'a>> {
         debug!("获取画廊信息: {}", self.url);
         let response = send!(self.client.get(&self.url))?;
-        debug!("状态码: {}", response.status());
         let mut html = parse_html(response.text().await?)?;
 
         // 英文标题和日文标题
@@ -221,7 +220,6 @@ impl<'a> FullGalleryInfo<'a> {
     pub async fn upload_image(&self, url: &str) -> Result<String> {
         debug!("获取图片真实地址中：{}", url);
         let response = send!(self.client.get(url))?;
-        trace!("状态码: {}", response.status());
 
         let url = parse_html(response.text().await?)?
             .xpath_text(r#"//img[@id="img"]/@src"#)?

@@ -1522,7 +1522,7 @@ dependencies = [
 [[package]]
 name = "telegraph-rs"
 version = "0.5.0"
-source = "git+https://github.com/Aloxaf/telegraph-rs#a3f6da50ac7e1dd1f9e3722f30e68d4cebb27bf4"
+source = "git+https://github.com/Aloxaf/telegraph-rs#eb1301554e9073f8943d28c7945e49b56b92ce78"
 dependencies = [
  "libxml",
  "mime_guess",
