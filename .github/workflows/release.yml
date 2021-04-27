@@ -33,6 +33,8 @@ jobs:
         with:
           fetch-depth: 1
       - uses: actions-rs/toolchain@v1
+        env:
+          RUSTFLAGS: -C lto
         with:
           toolchain: stable
           override: true
