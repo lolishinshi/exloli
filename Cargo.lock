@@ -433,6 +433,7 @@ dependencies = [
  "tokio-stream",
  "toml",
  "unicode-width",
+ "url",
  "uuid",
  "v_htmlescape",
 ]
@@ -1849,6 +1850,7 @@ dependencies = [
  "idna",
  "matches",
  "percent-encoding",
+ "serde",
 ]
 
 [[package]]

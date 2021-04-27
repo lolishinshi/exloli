@@ -1,20 +1,21 @@
+use crate::utils::HOST;
 use crate::xpath::parse_html;
 use crate::{CONFIG, DB};
 use anyhow::{anyhow, Context, Result};
 use futures::executor::block_on;
 use futures::prelude::*;
+use once_cell::sync::Lazy;
 use reqwest::header::{self, HeaderMap, HeaderValue};
 use reqwest::{redirect::Policy, Client, Proxy, Response};
 use telegraph_rs::Telegraph;
 use tempfile::NamedTempFile;
+use tokio::task::block_in_place;
 use tokio::time::sleep;
 
-use once_cell::sync::Lazy;
 use std::io::Write;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::task::block_in_place;
 
 macro_rules! set_header {
     ($($k:ident => $v:expr), *) => {{
@@ -30,6 +31,7 @@ macro_rules! send {
     };
 }
 
+static REFERER: Lazy<String> = Lazy::new(|| format!("https://{}/", *HOST));
 static HEADERS: Lazy<HeaderMap> = Lazy::new(|| {
     set_header! {
         ACCEPT => "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -37,8 +39,8 @@ static HEADERS: Lazy<HeaderMap> = Lazy::new(|| {
         ACCEPT_LANGUAGE => "zh-CN,en-US;q=0.7,en;q=0.3",
         CACHE_CONTROL => "max-age=0",
         DNT => "1",
-        HOST => "exhentai.org",
-        REFERER => "https://exhentai.org/",
+        HOST => *HOST,
+        REFERER => &*REFERER,
         UPGRADE_INSECURE_REQUESTS => "1",
         USER_AGENT => "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:67.0) Gecko/20100101 Firefox/67.0"
     }
@@ -305,10 +307,10 @@ impl ExHentai {
 
         info!("登录里站...");
         // 访问里站, 取得必要的 cookie
-        let _response = send!(client.get("https://exhentai.org"))?;
+        let _response = send!(client.get(format!("https://{}", *HOST)))?;
         // 获得过滤设置相关的 cookie ?
-        let _response = send!(client.get("https://exhentai.org/uconfig.php"))?;
-        let _response = send!(client.get("https://exhentai.org/mytags"))?;
+        let _response = send!(client.get(format!("https://{}/uconfig.php", *HOST)))?;
+        let _response = send!(client.get(format!("https://{}/mytags", *HOST)))?;
         info!("登录成功!");
 
         Ok(Self { client })
@@ -331,8 +333,8 @@ impl ExHentai {
         }
         let client = client.build()?;
 
-        let _response = send!(client.get("https://exhentai.org/uconfig.php"))?;
-        let _response = send!(client.get("https://exhentai.org/mytags"))?;
+        let _response = send!(client.get(format!("https://{}/uconfig.php", *HOST)))?;
+        let _response = send!(client.get(format!("https://{}/mytags", *HOST)))?;
         info!("登录成功!");
 
         Ok(Self { client })
@@ -343,7 +345,7 @@ impl ExHentai {
         debug!("搜索第 {} 页", page);
         let response = send!(self
             .client
-            .get(&CONFIG.exhentai.search_url)
+            .get(CONFIG.exhentai.search_url.clone())
             .query(&CONFIG.exhentai.search_params)
             .query(&[("page", &page.to_string())]))?;
         debug!("状态码: {}", response.status());

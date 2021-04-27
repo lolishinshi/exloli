@@ -5,6 +5,14 @@ use regex::Regex;
 use std::borrow::Cow;
 use std::time::SystemTime;
 
+pub static HOST: Lazy<&'static str> = Lazy::new(|| {
+    CONFIG
+        .exhentai
+        .search_url
+        .host_str()
+        .expect("failed to extract host from search_url")
+});
+
 /// 将图片地址格式化为 html
 pub fn img_urls_to_html(img_urls: &[String]) -> String {
     img_urls

@@ -1,6 +1,6 @@
 use crate::exhentai::*;
 use crate::schema::*;
-use crate::utils::{get_id_from_gallery, get_id_from_image};
+use crate::utils::*;
 use anyhow::Result;
 use chrono::prelude::*;
 use diesel::dsl::sql;
@@ -225,6 +225,6 @@ impl DataBase {
 
 impl Gallery {
     pub fn get_url(&self) -> String {
-        format!("https://exhentai.org/g/{}/{}/", self.gallery_id, self.token)
+        format!("https://{}/g/{}/{}/", *HOST, self.gallery_id, self.token)
     }
 }

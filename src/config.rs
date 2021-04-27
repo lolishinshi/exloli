@@ -2,6 +2,7 @@ use anyhow::Error;
 use serde::Deserialize;
 use std::{fs::File, io::Read, path::Path};
 use teloxide::types::ChatId;
+use url::Url;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -19,7 +20,7 @@ pub struct ExHentai {
     pub username: String,
     pub password: String,
     pub cookie: Option<String>,
-    pub search_url: String,
+    pub search_url: Url,
     pub search_params: Vec<(String, String)>,
     pub max_pages: i32,
     pub max_img_cnt: usize,
