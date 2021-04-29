@@ -21,5 +21,5 @@ FROM gallery;
 DROP TABLE gallery;
 ALTER TABLE gallery_tmp RENAME TO gallery;
 
-CREATE UNIQUE INDEX IF NOT EXISTS gallery_id_index ON gallery (gallery_id);
+CREATE INDEX IF NOT EXISTS gallery_id_index ON gallery (gallery_id);
 CREATE INDEX IF NOT EXISTS poll_id_index ON gallery (poll_id);

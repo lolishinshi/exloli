@@ -163,7 +163,7 @@ fn get_input_gallery(message: &Message, s: &str) -> Vec<InputGallery> {
     let i1 = MESSAGE_URL.captures_iter(s).filter_map(|c| {
         c.get(1)
             .and_then(|s| s.as_str().parse::<i32>().ok())
-            .and_then(|n| DB.query_gallery_by_message_id(n).ok())
+            .and_then(|n| DB.query_gallery(n).ok())
             .map(InputGallery::Gallery)
     });
     let i2 = EXHENTAI_URL.captures_iter(s).filter_map(|c| {

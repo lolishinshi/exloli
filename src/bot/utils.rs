@@ -55,7 +55,7 @@ impl MessageExt for Message {
     fn reply_to_gallery(&self) -> Option<Gallery> {
         self.reply_to_message()
             .and_then(|message| message.forward_from_message_id())
-            .and_then(|mess_id| DB.query_gallery_by_message_id(*mess_id).ok())
+            .and_then(|mess_id| DB.query_gallery(*mess_id).ok())
     }
 }
 

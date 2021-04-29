@@ -79,10 +79,11 @@ impl DataBase {
 
     pub fn insert_gallery(
         &self,
+        message_id: i32,
         info: &FullGalleryInfo,
         telegraph: String,
-        message_id: i32,
     ) -> Result<()> {
+        debug!("添加新画廊");
         let (gallery_id, token) = get_id_from_gallery(&info.url);
         let gallery = Gallery {
             title: info.title.to_owned(),
@@ -129,7 +130,7 @@ impl DataBase {
     }
 
     /// 根据消息 id 删除画廊，并不会实际删除，否则又会在定时更新时被上传
-    pub fn delete_gallery_by_message_id(&self, message_id: i32) -> Result<()> {
+    pub fn delete_gallery(&self, message_id: i32) -> Result<()> {
         diesel::update(gallery::table)
             .filter(gallery::message_id.eq(message_id))
             .set(gallery::score.eq(-1.0))
@@ -138,7 +139,7 @@ impl DataBase {
     }
 
     /// 根据消息 id 删除画廊，这是真的删除
-    pub fn real_delete_gallery_by_message_id(&self, message_id: i32) -> Result<()> {
+    pub fn real_delete_gallery(&self, message_id: i32) -> Result<()> {
         diesel::delete(gallery::table)
             .filter(gallery::message_id.eq(message_id))
             .execute(&self.pool.get()?)?;
@@ -209,7 +210,7 @@ impl DataBase {
             .get_result::<Gallery>(&self.pool.get()?)?)
     }
 
-    pub fn query_gallery_by_message_id(&self, message_id: i32) -> Result<Gallery> {
+    pub fn query_gallery(&self, message_id: i32) -> Result<Gallery> {
         Ok(gallery::table
             .filter(gallery::message_id.eq(message_id))
             .get_result::<Gallery>(&self.pool.get()?)?)

@@ -49,10 +49,10 @@ async fn cmd_delete(message: &Update<Message>, real: bool) -> Result<Message> {
         .context("获取转发来源失败")?;
     BOT.delete_message(to_del.chat.id, to_del.id).await?;
     BOT.delete_message(channel.id, *mes_id).await?;
-    let gallery = DB.query_gallery_by_message_id(*mes_id)?;
+    let gallery = DB.query_gallery(*mes_id)?;
     match real {
-        false => DB.delete_gallery_by_message_id(*mes_id)?,
-        _ => DB.real_delete_gallery_by_message_id(*mes_id)?,
+        false => DB.delete_gallery(*mes_id)?,
+        _ => DB.real_delete_gallery(*mes_id)?,
     }
     let text = format!("画廊 {} 已删除", gallery.get_url());
     Ok(BOT.send_message(message.chat_id(), text).await?)
