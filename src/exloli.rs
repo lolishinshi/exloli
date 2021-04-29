@@ -93,7 +93,7 @@ impl ExLoli {
 
         let mut gallery = basic_info.clone().into_full_info().await?;
 
-        // 判断是否上传过历史版本并且不需要更新
+        // 判断是否上传过历史版本
         let old_gallery = self.get_history_upload(&gallery).await;
         match &old_gallery {
             Ok(g) => {
@@ -115,6 +115,7 @@ impl ExLoli {
                     gallery.limit = false;
                 }
 
+                // 如果没有过期或者没有图片修改，则直接更新历史消息
                 if not_outdated || not_addimg {
                     info!("找到历史上传：{}", g.message_id);
                     return self.update_gallery(&g, Some(gallery)).await;
@@ -140,22 +141,7 @@ impl ExLoli {
         // 不需要原地更新的旧本子，发布新消息
         let message = self.publish_to_telegram(&gallery, &page.url).await?;
 
-        // 如果是在更新旧画廊，则需要修改原来的记录
-        if old_gallery
-            .as_ref()
-            .map(|g| g.gallery_id == get_id_from_gallery(&gallery.url).0)
-            .unwrap_or(false)
-        {
-            DB.update_gallery(
-                &old_gallery.unwrap(),
-                &gallery,
-                &page.url,
-                message.id,
-                img_urls.len(),
-            )
-        } else {
-            DB.insert_gallery(&gallery, page.url, message.id)
-        }
+        DB.insert_gallery(&gallery, page.url, message.id)
     }
 
     /// 原地更新画廊，若 gallery 为 None 则原地更新为原画廊的完整版
@@ -190,7 +176,7 @@ impl ExLoli {
             .edit_telegraph(extract_telegraph_path(&ogallery.telegraph), title, &content)
             .await?;
         let url = format!("{}?_={}", page.url, get_timestamp());
-        self.update_message(ogallery, &gallery, &url, img_urls.len())
+        self.update_message(ogallery.message_id, &gallery, &url, img_urls.len())
             .await
     }
 
@@ -230,33 +216,26 @@ impl ExLoli {
             .await?;
 
         let upload_images = old_gallery.upload_images as usize;
-        self.update_message(&old_gallery, &new_gallery, &new_page.url, upload_images)
+        let message_id = old_gallery.message_id;
+        self.update_message(message_id, &new_gallery, &new_page.url, upload_images)
             .await
     }
 
     /// 更新旧消息并同时更新数据库
     async fn update_message<'a>(
         &self,
-        old_gallery: &Gallery,
+        message_id: i32,
         gallery: &FullGalleryInfo<'a>,
         article: &str,
         upload_images: usize,
     ) -> Result<()> {
         info!("更新 Telegram 频道消息");
         let text = Self::get_message_string(gallery, article);
-        match BOT
-            .edit_message_text(
-                CONFIG.telegram.channel_id.clone(),
-                old_gallery.message_id,
-                &text,
-            )
+        BOT.edit_message_text(CONFIG.telegram.channel_id.clone(), message_id, &text)
             .parse_mode(ParseMode::Html)
             .send()
-            .await
-        {
-            Ok(mes) => DB.update_gallery(&old_gallery, &gallery, article, mes.id, upload_images),
-            Err(e) => Err(e.into()),
-        }
+            .await?;
+        DB.update_gallery(message_id, &gallery, article, upload_images)
     }
 
     /// 将画廊内容上传至 telegraph

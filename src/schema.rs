@@ -1,5 +1,6 @@
 table! {
-    gallery (gallery_id) {
+    gallery (message_id) {
+        message_id -> Integer,
         gallery_id -> Integer,
         token -> Text,
         title -> Text,
@@ -7,7 +8,6 @@ table! {
         telegraph -> Text,
         upload_images -> SmallInt,
         publish_date -> Date,
-        message_id -> Integer,
         poll_id -> Text,
         score -> Float,
         votes -> Text,
@@ -21,4 +21,7 @@ table! {
     }
 }
 
-allow_tables_to_appear_in_same_query!(gallery, images,);
+allow_tables_to_appear_in_same_query!(
+    gallery,
+    images,
+);

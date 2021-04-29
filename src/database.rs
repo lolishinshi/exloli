@@ -14,6 +14,7 @@ embed_migrations!("migrations");
 #[derive(Queryable, Insertable, PartialEq, Debug, Clone)]
 #[table_name = "gallery"]
 pub struct Gallery {
+    pub message_id: i32,
     pub gallery_id: i32,
     pub token: String,
     pub title: String,
@@ -21,7 +22,6 @@ pub struct Gallery {
     pub telegraph: String,
     pub upload_images: i16,
     pub publish_date: NaiveDate,
-    pub message_id: i32,
     pub poll_id: String,
     pub score: f32,
     pub votes: String,
@@ -107,28 +107,19 @@ impl DataBase {
     /// 更新旧画廊信息
     pub fn update_gallery(
         &self,
-        old_gallery: &Gallery,
+        message_id: i32,
         info: &FullGalleryInfo,
         telegraph: &str,
-        message_id: i32,
         upload_images: usize,
     ) -> Result<()> {
         debug!("更新画廊数据");
         let (gallery_id, token) = get_id_from_gallery(&info.url);
-        // 如果这次更新发布了新消息，那么需要同时更改发布日期
-        if old_gallery.message_id != message_id {
-            diesel::update(gallery::table)
-                .filter(gallery::gallery_id.eq(old_gallery.gallery_id))
-                .set(gallery::publish_date.eq(Utc::today().naive_utc()))
-                .execute(&self.pool.get()?)?;
-        }
         diesel::update(gallery::table)
-            .filter(gallery::gallery_id.eq(old_gallery.gallery_id))
+            .filter(gallery::message_id.eq(message_id))
             .set((
                 gallery::gallery_id.eq(gallery_id),
                 gallery::title.eq(&info.title),
                 gallery::token.eq(token),
-                gallery::message_id.eq(message_id),
                 gallery::telegraph.eq(telegraph),
                 gallery::tags.eq(serde_json::to_string(&info.tags)?),
                 gallery::upload_images.eq(upload_images as i16),
@@ -213,6 +204,8 @@ impl DataBase {
         let (id, _) = get_id_from_gallery(url);
         Ok(gallery::table
             .filter(gallery::gallery_id.eq(id))
+            .order_by(gallery::publish_date.desc())
+            .limit(1)
             .get_result::<Gallery>(&self.pool.get()?)?)
     }
 
