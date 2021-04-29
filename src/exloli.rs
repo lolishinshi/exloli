@@ -140,10 +140,10 @@ impl ExLoli {
         // 不需要原地更新的旧本子，发布新消息
         let message = self.publish_to_telegram(&gallery, &page.url).await?;
 
-        // 如果是旧画廊，则需要修改原来的记录
+        // 如果是在更新旧画廊，则需要修改原来的记录
         if old_gallery
             .as_ref()
-            .map(|g| g.get_url() == gallery.url)
+            .map(|g| g.gallery_id == get_id_from_gallery(&gallery.url).0)
             .unwrap_or(false)
         {
             DB.update_gallery(
@@ -327,14 +327,14 @@ impl ExLoli {
 impl ExLoli {
     /// 获取画廊的历史上传
     async fn get_history_upload<'a>(&self, gallery: &FullGalleryInfo<'a>) -> Result<Gallery> {
-        let mut parent = gallery.parent.clone();
-        while let Some(url) = &parent {
+        let mut gallery_url = Some(gallery.url.clone());
+        while let Some(url) = &gallery_url {
             match DB.query_gallery_by_url(url) {
                 Ok(v) => return Ok(v),
                 _ => {
-                    let parent_gallery = self.exhentai.get_gallery_by_url(url).await?;
-                    let parent_gallery = parent_gallery.into_full_info().await?;
-                    parent = parent_gallery.parent;
+                    let gallery = self.exhentai.get_gallery_by_url(url).await?;
+                    let parent = gallery.into_full_info().await?;
+                    gallery_url = parent.parent;
                 }
             }
         }

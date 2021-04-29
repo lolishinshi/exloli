@@ -115,6 +115,13 @@ impl DataBase {
     ) -> Result<()> {
         debug!("更新画廊数据");
         let (gallery_id, token) = get_id_from_gallery(&info.url);
+        // 如果这次更新发布了新消息，那么需要同时更改发布日期
+        if old_gallery.message_id != message_id {
+            diesel::update(gallery::table)
+                .filter(gallery::gallery_id.eq(old_gallery.gallery_id))
+                .set(gallery::publish_date.eq(Utc::today().naive_utc()))
+                .execute(&self.pool.get()?)?;
+        }
         diesel::update(gallery::table)
             .filter(gallery::gallery_id.eq(old_gallery.gallery_id))
             .set((
@@ -127,13 +134,6 @@ impl DataBase {
                 gallery::upload_images.eq(upload_images as i16),
             ))
             .execute(&self.pool.get()?)?;
-        // 如果这次更新发布了新消息，那么需要同时更改发布日期
-        if old_gallery.message_id != message_id {
-            diesel::update(gallery::table)
-                .filter(gallery::gallery_id.eq(old_gallery.gallery_id))
-                .set(gallery::publish_date.eq(Utc::today().naive_utc()))
-                .execute(&self.pool.get()?)?;
-        }
         Ok(())
     }
 

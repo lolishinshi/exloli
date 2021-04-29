@@ -5,7 +5,9 @@ use crate::utils::get_message_url;
 use crate::*;
 use anyhow::{Context, Result};
 use chrono::{Duration, Utc};
+use futures::FutureExt;
 use std::convert::TryInto;
+use std::future::Future;
 use teloxide::types::*;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
@@ -38,26 +40,6 @@ async fn on_new_gallery(message: &Update<Message>) -> Result<()> {
     DB.update_poll_id(message_id, &poll_id)
 }
 
-/// 响应 /upload 命令，根据 url 上传指定画廊
-async fn cmd_upload(message: &Update<Message>, urls: &[String]) -> Result<Message> {
-    info!("执行：/upload {:?}", urls);
-    let mut text = "收到命令，上传中……".to_owned();
-    let mut reply_message = message.reply_to(&text).await?;
-    for (idx, url) in urls.iter().enumerate() {
-        match EXLOLI.upload_gallery_by_url(&url).await {
-            Ok(_) => text.push_str(&format!("\n第 {} 本 - 上传成功", idx + 1)),
-            Err(e) => text.push_str(&format!("\n第 {} 本 - 上传失败：{}", idx + 1, e)),
-        }
-        reply_message = BOT
-            .edit_message_text(reply_message.chat.id, reply_message.id, &text)
-            .await?;
-    }
-    text.push_str("\n上传完毕！");
-    Ok(BOT
-        .edit_message_text(reply_message.chat.id, reply_message.id, text)
-        .await?)
-}
-
 async fn cmd_delete(message: &Update<Message>, real: bool) -> Result<Message> {
     info!("执行：/delete {}", real);
     let to_del = message.update.reply_to_message().context("找不到回复")?;
@@ -76,56 +58,65 @@ async fn cmd_delete(message: &Update<Message>, real: bool) -> Result<Message> {
     Ok(BOT.send_message(message.chat_id(), text).await?)
 }
 
-async fn cmd_full(message: &Update<Message>, galleries: &[InputGallery]) -> Result<Message> {
-    info!("执行：/full");
-    let mut text = "收到命令，更新完整版本中...".to_owned();
+async fn do_chain_action<T, F, Fut>(
+    message: &Update<Message>,
+    input: &[T],
+    action: F,
+) -> Result<Message>
+where
+    F: Fn(&T) -> Fut,
+    Fut: Future<Output = Result<Option<()>>>,
+{
+    let mut text = "收到命令，执行中……".to_owned();
     let mut reply_message = message.reply_to(&text).await?;
-    for (idx, gallery) in galleries.iter().enumerate() {
-        let gallery = match gallery.to_gallery() {
-            Ok(v) => v,
-            Err(_) => {
-                text.push_str(&format!("\n第 {} 本，未上传", idx + 1));
-                continue;
-            }
+    for (idx, entry) in input.iter().enumerate() {
+        let message = match action(&entry).await {
+            Ok(Some(_)) => format!("\n第 {} 本 - 成功", idx + 1),
+            Ok(None) => format!("\n第 {} 本 - 无上传记录", idx + 1),
+            Err(e) => format!("\n第 {} 本 - 失败：{}", idx + 1, e),
         };
-        match EXLOLI.update_gallery(&gallery, None).await {
-            Ok(_) => text.push_str(&format!("\n第 {} 本，更新成功", idx + 1)),
-            Err(e) => text.push_str(&format!("\n第 {} 本，更新失败：{}", idx + 1, e)),
-        }
+        text.push_str(&message);
         reply_message = BOT
             .edit_message_text(reply_message.chat.id, reply_message.id, &text)
             .await?;
     }
-    text.push_str("\n更新完毕！");
+    text.push_str("\n执行完毕");
     Ok(BOT
         .edit_message_text(reply_message.chat.id, reply_message.id, text)
         .await?)
 }
 
-async fn cmd_update_tag(message: &Update<Message>, galleries: &[InputGallery]) -> Result<Message> {
-    info!("执行：/update_tag");
-    let mut text = "收到命令，更新 tag 中...".to_owned();
-    let mut reply_message = message.reply_to(&text).await?;
-    for (idx, gallery) in galleries.iter().enumerate() {
+async fn cmd_upload(message: &Update<Message>, urls: &[String]) -> Result<Message> {
+    info!("执行：/upload {:?}", urls);
+    do_chain_action(message, urls, |url| {
+        let url = url.clone();
+        async move { EXLOLI.upload_gallery_by_url(&url).await.map(Some) }.boxed()
+    })
+    .await
+}
+
+async fn cmd_full(message: &Update<Message>, galleries: &[InputGallery]) -> Result<Message> {
+    info!("执行：/full");
+    do_chain_action(message, galleries, |gallery| {
         let gallery = match gallery.to_gallery() {
             Ok(v) => v,
-            Err(_) => {
-                text.push_str(&format!("\n第 {} 本，未上传", idx + 1));
-                continue;
-            }
+            _ => return async { Ok(None) }.boxed(),
         };
-        match EXLOLI.update_tag(&gallery, None).await {
-            Ok(_) => text.push_str(&format!("\n第 {} 本，更新成功", idx + 1)),
-            Err(e) => text.push_str(&format!("\n第 {} 本，更新失败：{}", idx + 1, e)),
-        }
-        reply_message = BOT
-            .edit_message_text(reply_message.chat.id, reply_message.id, &text)
-            .await?;
-    }
-    text.push_str("\n更新完毕！");
-    Ok(BOT
-        .edit_message_text(reply_message.chat.id, reply_message.id, text)
-        .await?)
+        async move { EXLOLI.update_gallery(&gallery, None).await.map(Some) }.boxed()
+    })
+    .await
+}
+
+async fn cmd_update_tag(message: &Update<Message>, galleries: &[InputGallery]) -> Result<Message> {
+    info!("执行：/update_tag");
+    do_chain_action(message, galleries, |gallery| {
+        let gallery = match gallery.to_gallery() {
+            Ok(v) => v,
+            _ => return async { Ok(None) }.boxed(),
+        };
+        async move { EXLOLI.update_tag(&gallery, None).await.map(Some) }.boxed()
+    })
+    .await
 }
 
 fn query_best_text(from: i64, to: i64, offset: i64) -> Result<String> {
