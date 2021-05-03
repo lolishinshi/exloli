@@ -189,11 +189,18 @@ impl<'a> FullGalleryInfo<'a> {
             info!("第 {} / {} 张图片", now + 1, img_cnt);
         };
 
+        let mut client_builder = Client::builder().timeout(Duration::from_secs(30));
+        if let Some(proxy) = &CONFIG.telegraph.proxy {
+            client_builder = client_builder.proxy(Proxy::all(proxy)?);
+        }
+        let client = client_builder.build()?;
+        let client_ref = &client;
+
         // TODO: 避免一次 clone？
         let get_url = |url: String| async move {
             update_progress();
             for _ in 0..5i32 {
-                match self.upload_image(&url).await {
+                match self.upload_image(&url, &client_ref).await {
                     Ok(v) => return Ok(v),
                     Err(e) => error!("获取图片地址失败：{}", e),
                 }
@@ -217,7 +224,7 @@ impl<'a> FullGalleryInfo<'a> {
     }
 
     /// 上传指定的图片并返回上传后的地址
-    pub async fn upload_image(&self, url: &str) -> Result<String> {
+    pub async fn upload_image(&self, url: &str, client: &Client) -> Result<String> {
         debug!("获取图片真实地址中：{}", url);
         let response = send!(self.client.get(url))?;
 
@@ -231,13 +238,6 @@ impl<'a> FullGalleryInfo<'a> {
         }
 
         debug!("下载图片中：{}", &url);
-
-        // TODO: 是否有必要创建新的 client？
-        let mut client_builder = Client::builder().timeout(Duration::from_secs(30));
-        if let Some(proxy) = &CONFIG.telegraph.proxy {
-            client_builder = client_builder.proxy(Proxy::all(proxy)?);
-        }
-        let client = client_builder.build()?;
 
         let bytes = client.get(&url).send().and_then(Response::bytes).await?;
         let mut tmp = NamedTempFile::new()?;

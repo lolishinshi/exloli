@@ -1,5 +1,7 @@
 use anyhow::Error;
+use reqwest::{Client, Proxy};
 use serde::Deserialize;
+use std::time::Duration;
 use std::{fs::File, io::Read, path::Path};
 use teloxide::types::ChatId;
 use url::Url;
@@ -54,9 +56,15 @@ impl Config {
 
     pub async fn init_telegraph(&self) -> Result<telegraph_rs::Telegraph, Error> {
         let telegraph = &self.telegraph;
+        let mut client_builder = Client::builder().timeout(Duration::from_secs(30));
+        if let Some(proxy) = &self.telegraph.proxy {
+            client_builder = client_builder.proxy(Proxy::all(proxy)?);
+        }
+        let client = client_builder.build()?;
         Ok(telegraph_rs::Telegraph::new(&telegraph.author_name)
             .author_url(&telegraph.author_url)
             .access_token(&telegraph.access_token)
+            .client(client)
             .create()
             .await?)
     }

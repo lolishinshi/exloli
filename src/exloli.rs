@@ -60,10 +60,11 @@ impl ExLoli {
         // 已删除画廊不更新
         if (g.score - -1.0).abs() < f32::EPSILON
             // 7 天前的本子，如果是同一 weekday 发的则更新
-            || !(duration.num_days() > 7 && now.weekday() == g.publish_date.weekday() && now.hour() % 8 == 0)
+            || (duration.num_days() > 7 && !(now.weekday() == g.publish_date.weekday() && now.hour() % 8 == 0))
             // 两天前的本子，每 4 小时更新一次
-            || !(duration.num_days() > 2 && now.hour() % 4 == 0)
+            || (duration.num_days() > 2 && !(now.hour() % 4 == 0))
         {
+            debug!("跳过更新：{}", g.publish_date);
             return Ok(());
         }
 
@@ -106,8 +107,7 @@ impl ExLoli {
                 let outdate = CONFIG.exhentai.outdate.unwrap_or(7);
                 let not_outdated =
                     g.publish_date + Duration::days(outdate) > Utc::today().naive_utc();
-                let not_addimg =
-                    gallery.img_pages.len() == g.upload_images as usize && gallery.limit;
+                let not_bigupdate = gallery.img_pages.len() == g.upload_images as usize;
 
                 // FIXME: 当前判断方法可能会误判，而且修改最大图片数量以后会失效
                 // 如果曾经更新过完整版，则继续上传完整版
@@ -116,7 +116,7 @@ impl ExLoli {
                 }
 
                 // 如果没有过期或者没有图片修改，则直接更新历史消息
-                if not_outdated || not_addimg {
+                if not_outdated || not_bigupdate {
                     info!("找到历史上传：{}", g.message_id);
                     return self.update_gallery(&g, Some(gallery)).await;
                 } else {
