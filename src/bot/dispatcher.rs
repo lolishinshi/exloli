@@ -409,6 +409,7 @@ async fn callback_handler(callback: Update<CallbackQuery>) -> Result<()> {
         }
         _ => error!("未知指令：{}", cmd),
     };
+    BOT.answer_callback_query(update.id).await?;
     Ok(())
 }
 
