@@ -44,7 +44,7 @@ async fn on_new_gallery(message: &Update<Message>) -> Result<()> {
     let message_id = *message.update.forward_from_message_id().unwrap();
     let poll_id = DB.query_poll_id(message_id)?.parse::<i32>()?;
     let options = poll_keyboard(poll_id, &[0, 0, 0, 0, 0]);
-    BOT.send_message(message.update.chat.id, "看完以后发表一下感想吧！")
+    BOT.send_message(message.update.chat.id, "当前 0 人投票，0 分")
         .reply_markup(options)
         .reply_to_message_id(message.update.id)
         .await?;
@@ -372,7 +372,15 @@ async fn callback_poll(message: &Message, user_id: i64, data: &str) -> Result<()
     let reply = poll_keyboard(poll_id, &votes);
     let score = wilson_score(&votes);
     let ret = BOT
-        .edit_message_reply_markup(message.chat.id, message.id)
+        .edit_message_text(
+            message.chat.id,
+            message.id,
+            &format!(
+                "当前投票 {} 人，{:.2} 分",
+                votes.iter().sum::<i32>(),
+                score * 100.
+            ),
+        )
         .reply_markup(reply)
         .await;
     // 用户可能会点多次相同选项，此时会产生一个 MessageNotModified 的错误
