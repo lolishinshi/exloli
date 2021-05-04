@@ -1,5 +1,5 @@
-mod bot;
 mod command;
+mod dispatcher;
 mod utils;
 
-pub use bot::start_bot;
+pub use dispatcher::start_bot;

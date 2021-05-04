@@ -34,6 +34,14 @@ pub struct Image {
     pub url: String,
 }
 
+#[derive(Queryable, Insertable)]
+#[table_name = "user_vote"]
+pub struct UserVote {
+    user_id: i64,
+    poll_id: i32,
+    option: i32,
+}
+
 pub struct DataBase {
     pool: Pool<ConnectionManager<SqliteConnection>>,
 }
@@ -191,6 +199,36 @@ impl DataBase {
             .set(gallery::poll_id.eq(poll_id))
             .execute(&self.pool.get()?)?;
         Ok(())
+    }
+
+    pub fn query_poll_id(&self, message_id: i32) -> Result<String> {
+        Ok(gallery::table
+            .filter(gallery::message_id.eq(message_id))
+            .select(gallery::poll_id)
+            .get_result::<String>(&self.pool.get()?)?)
+    }
+
+    pub fn insert_vote(&self, user_id: i64, poll_id: i32, option: i32) -> Result<()> {
+        diesel::replace_into(user_vote::table)
+            .values(&vec![(
+                user_vote::user_id.eq(user_id),
+                user_vote::poll_id.eq(poll_id),
+                user_vote::option.eq(option),
+            )])
+            .execute(&*self.pool.get()?)?;
+        Ok(())
+    }
+
+    pub fn query_vote(&self, poll_id: i32) -> Result<[i32; 5]> {
+        let mut ret = [0; 5];
+        let options = user_vote::table
+            .select(user_vote::option)
+            .filter(user_vote::poll_id.eq(poll_id))
+            .load::<i32>(&self.pool.get()?)?;
+        for i in options {
+            ret[i as usize - 1] += 1
+        }
+        Ok(ret)
     }
 
     pub fn update_score(&self, poll_id: &str, score: f32, votes: &str) -> Result<()> {

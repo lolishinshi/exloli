@@ -21,4 +21,16 @@ table! {
     }
 }
 
-allow_tables_to_appear_in_same_query!(gallery, images,);
+table! {
+    user_vote (user_id, poll_id) {
+        user_id -> BigInt,
+        poll_id -> Integer,
+        option -> Integer,
+    }
+}
+
+allow_tables_to_appear_in_same_query!(
+    gallery,
+    images,
+    user_vote,
+);

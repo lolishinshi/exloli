@@ -11,33 +11,43 @@ use std::future::Future;
 use teloxide::types::*;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
-// TODO: 新本子继承父画廊的投票？
+fn poll_keyboard(poll_id: i32, votes: &[i32; 5]) -> InlineKeyboardMarkup {
+    let sum = votes.iter().sum::<i32>();
+    let votes: Box<dyn Iterator<Item = f32>> = if sum == 0 {
+        Box::new([0.].iter().cloned().cycle())
+    } else {
+        Box::new(votes.iter().map(|&i| i as f32 / sum as f32 * 100.))
+    };
+
+    let options = ["我瞎了", "不咋样", "还行吧", "不错哦", "太棒了"]
+        .iter()
+        .zip(votes)
+        .enumerate()
+        .map(|(idx, (name, vote))| {
+            vec![InlineKeyboardButton::new(
+                format!("{:.0}% {}", vote, name),
+                InlineKeyboardButtonKind::CallbackData(format!("vote {} {}", poll_id, idx + 1)),
+            )]
+        })
+        .collect::<Vec<_>>();
+
+    InlineKeyboardMarkup::new(options)
+}
+
 async fn on_new_gallery(message: &Update<Message>) -> Result<()> {
     info!("频道消息更新，发送投票");
     // 辣鸡 tg 安卓客户端在置顶消息过多时似乎在进群时会卡住
     BOT.unpin_chat_message(message.update.chat.id)
         .message_id(message.update.id)
         .await?;
-    let options = vec![
-        "我瞎了".into(),
-        "不咋样".into(),
-        "还行吧".into(),
-        "不错哦".into(),
-        "太棒了".into(),
-    ];
-    let poll = BOT
-        .send_poll(
-            message.update.chat.id,
-            "看完以后发表一下感想吧！",
-            options,
-            PollType::Regular,
-        )
+    let message_id = *message.update.forward_from_message_id().unwrap();
+    let poll_id = DB.query_poll_id(message_id)?.parse::<i32>()?;
+    let options = poll_keyboard(poll_id, &[0, 0, 0, 0, 0]);
+    BOT.send_message(message.update.chat.id, "看完以后发表一下感想吧！")
+        .reply_markup(options)
         .reply_to_message_id(message.update.id)
         .await?;
-    let poll_id = poll.poll().unwrap().id.to_owned();
-    let message_id = *message.update.forward_from_message_id().unwrap();
-    debug!("投票：{} {}", message_id, poll_id);
-    DB.update_poll_id(message_id, &poll_id)
+    Ok(())
 }
 
 async fn cmd_delete(message: &Update<Message>, real: bool) -> Result<Message> {
@@ -143,24 +153,15 @@ fn query_best_text(from: i64, to: i64, offset: i64) -> Result<String> {
 }
 
 fn query_best_keyboard(from: i64, to: i64, offset: i64) -> InlineKeyboardMarkup {
-    InlineKeyboardMarkup::new(vec![vec![
-        InlineKeyboardButton::new(
-            "<<",
-            InlineKeyboardButtonKind::CallbackData(format!("<< {} {} {}", from, to, offset)),
-        ),
-        InlineKeyboardButton::new(
-            "<",
-            InlineKeyboardButtonKind::CallbackData(format!("< {} {} {}", from, to, offset)),
-        ),
-        InlineKeyboardButton::new(
-            ">",
-            InlineKeyboardButtonKind::CallbackData(format!("> {} {} {}", from, to, offset)),
-        ),
-        InlineKeyboardButton::new(
-            ">>",
-            InlineKeyboardButtonKind::CallbackData(format!(">> {} {} {}", from, to, offset)),
-        ),
-    ]])
+    InlineKeyboardMarkup::new(vec![["<<", "<", ">", ">>"]
+        .iter()
+        .map(|&s| {
+            InlineKeyboardButton::new(
+                s,
+                InlineKeyboardButtonKind::CallbackData(format!("{} {} {} {}", s, from, to, offset)),
+            )
+        })
+        .collect::<Vec<_>>()])
 }
 
 async fn cmd_best(message: &Update<Message>, from: i64, to: i64) -> Result<Message> {
@@ -330,9 +331,56 @@ async fn inline_handler(query: Update<InlineQuery>) -> Result<()> {
     Ok(())
 }
 
+fn split_vec<T: FromStr>(s: &str) -> std::result::Result<Vec<T>, T::Err> {
+    s.split(' ')
+        .map(T::from_str)
+        .collect::<std::result::Result<Vec<_>, _>>()
+}
+
+async fn callback_change_page(message: &Message, cmd: &str, data: &str) -> Result<()> {
+    // vec![from, to, offset]
+    let data = split_vec::<i64>(data)?;
+    let [from, to, mut offset] = match TryInto::<[i64; 3]>::try_into(data) {
+        Ok(v) => v,
+        _ => return Ok(()),
+    };
+    match cmd {
+        ">" => offset += 20,
+        "<" => offset -= 20,
+        ">>" => offset = -1,
+        "<<" => offset = 1,
+        _ => (),
+    };
+    let text = query_best_text(from, to, offset)?;
+    let reply = query_best_keyboard(from, to, offset);
+    BOT.edit_message_text(message.chat.id, message.id, &text)
+        .parse_mode(ParseMode::Html)
+        .reply_markup(reply)
+        .await?;
+    Ok(())
+}
+
+async fn callback_poll(message: &Message, user_id: i64, data: &str) -> Result<()> {
+    let data = split_vec::<i32>(data)?;
+    let [poll_id, option] = match TryInto::<[i32; 2]>::try_into(data) {
+        Ok(v) => v,
+        _ => return Ok(()),
+    };
+    DB.insert_vote(user_id, poll_id, option)?;
+    let votes = DB.query_vote(poll_id)?;
+    let reply = poll_keyboard(poll_id, &votes);
+    let score = wilson_score(&votes);
+    BOT.edit_message_reply_markup(message.chat.id, message.id)
+        .reply_markup(reply)
+        .await?;
+    DB.update_score(&poll_id.to_string(), score, &serde_json::to_string(&votes)?)?;
+    debug!("投票状态变动：{} -> {}", poll_id, score);
+    Ok(())
+}
+
 async fn callback_handler(callback: Update<CallbackQuery>) -> Result<()> {
     let update = callback.update;
-    info!("回调：{:?}", update.data);
+    debug!("回调：{:?}", update.data);
 
     let (cmd, data) = match update.data.as_ref().and_then(|v| {
         // TODO: split_once
@@ -354,28 +402,10 @@ async fn callback_handler(callback: Update<CallbackQuery>) -> Result<()> {
     };
     match cmd {
         "<<" | ">>" | "<" | ">" => {
-            // vec![from, to, offset]
-            let data = data
-                .split(' ')
-                .map(|s| s.parse::<i64>())
-                .collect::<std::result::Result<Vec<_>, _>>()?;
-            let [from, to, mut offset] = match TryInto::<[i64; 3]>::try_into(data) {
-                Ok(v) => v,
-                _ => return Ok(()),
-            };
-            match cmd {
-                ">" => offset += 20,
-                "<" => offset -= 20,
-                ">>" => offset = -1,
-                "<<" => offset = 1,
-                _ => (),
-            };
-            let text = query_best_text(from, to, offset)?;
-            let reply = query_best_keyboard(from, to, offset);
-            BOT.edit_message_text(message.chat.id, message.id, &text)
-                .parse_mode(ParseMode::Html)
-                .reply_markup(reply)
-                .await?;
+            callback_change_page(&message, cmd, data).await?;
+        }
+        "vote" => {
+            callback_poll(&message, update.from.id, data).await?;
         }
         _ => error!("未知指令：{}", cmd),
     };
