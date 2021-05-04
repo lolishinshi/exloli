@@ -191,7 +191,10 @@ async fn cmd_query(message: &Update<Message>, gs: &[InputGallery]) -> Result<Mes
             .collect::<Vec<_>>()
             .join("\n"),
     };
-    Ok(message.reply_to(text).await?)
+    Ok(message
+        .reply_to(text)
+        .disable_web_page_preview(true)
+        .await?)
 }
 
 fn cmd_query_rank(gallery: &Gallery) -> Result<String> {
