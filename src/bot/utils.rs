@@ -119,15 +119,11 @@ pub fn wilson_score(votes: &[i32]) -> f32 {
     if count == 0. {
         return 0.;
     }
-    let mean = votes
-        .iter()
-        .zip(base.iter())
+    let mean = Iterator::zip(votes.iter(), base.iter())
         .map(|(&a, &b)| a as f32 * b)
         .sum::<f32>()
         / count;
-    let var = votes
-        .iter()
-        .zip(base.iter())
+    let var = Iterator::zip(votes.iter(), base.iter())
         .map(|(&a, &b)| (mean - b).powi(2) * a as f32)
         .sum::<f32>()
         / count;

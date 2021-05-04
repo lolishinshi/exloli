@@ -9,6 +9,7 @@ use futures::FutureExt;
 use std::convert::TryInto;
 use std::future::Future;
 use teloxide::types::*;
+use teloxide::{ApiError, RequestError};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
 fn poll_keyboard(poll_id: i32, votes: &[i32; 5]) -> InlineKeyboardMarkup {
@@ -370,9 +371,18 @@ async fn callback_poll(message: &Message, user_id: i64, data: &str) -> Result<()
     let votes = DB.query_vote(poll_id)?;
     let reply = poll_keyboard(poll_id, &votes);
     let score = wilson_score(&votes);
-    BOT.edit_message_reply_markup(message.chat.id, message.id)
+    let ret = BOT
+        .edit_message_reply_markup(message.chat.id, message.id)
         .reply_markup(reply)
-        .await?;
+        .await;
+    // 用户可能会点多次相同选项，此时会产生一个 MessageNotModified 的错误
+    match ret {
+        Err(RequestError::ApiError {
+            kind: ApiError::MessageNotModified,
+            ..
+        }) => Ok(()),
+        _ => ret.map(|_| ()),
+    }?;
     DB.update_score(&poll_id.to_string(), score, &serde_json::to_string(&votes)?)?;
     debug!("投票状态变动：{} -> {}", poll_id, score);
     Ok(())
