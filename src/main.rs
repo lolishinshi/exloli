@@ -76,7 +76,7 @@ async fn run() -> Result<(), Error> {
     }
 
     env::var("DATABASE_URL").expect("请设置 DATABASE_URL");
-    info!("初始化数据库");
+
     DB.init_database()?;
 
     let debug = matches.opt_present("debug");

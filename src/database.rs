@@ -59,6 +59,7 @@ impl DataBase {
     }
 
     pub fn init_database(&self) -> Result<()> {
+        info!("初始化数据库");
         embedded_migrations::run(&self.pool.get()?)?;
         embedded_migrations::run_with_output(&self.pool.get()?, &mut std::io::stdout())?;
         Ok(())

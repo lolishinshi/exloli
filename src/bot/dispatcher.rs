@@ -55,7 +55,7 @@ async fn on_new_gallery(message: &Update<Message>) -> Result<()> {
 }
 
 async fn cmd_delete(message: &Update<Message>, real: bool) -> Result<Message> {
-    info!("执行：/delete {}", real);
+    info!("执行命令: delete_{} {}", real, message.update.id);
     let to_del = message.update.reply_to_message().context("找不到回复")?;
     let channel = to_del.forward_from_chat().context("获取来源对话失败")?;
     let mes_id = to_del
@@ -101,7 +101,7 @@ where
 }
 
 async fn cmd_upload(message: &Update<Message>, urls: &[String]) -> Result<Message> {
-    info!("执行：/upload {:?}", urls);
+    info!("执行命令: upload {:?}", urls);
     do_chain_action(message, urls, |url| {
         let url = url.clone();
         async move { EXLOLI.upload_gallery_by_url(&url).await.map(Some) }.boxed()
@@ -110,7 +110,7 @@ async fn cmd_upload(message: &Update<Message>, urls: &[String]) -> Result<Messag
 }
 
 async fn cmd_full(message: &Update<Message>, galleries: &[InputGallery]) -> Result<Message> {
-    info!("执行：/full");
+    info!("执行命令: full {:?}", galleries);
     do_chain_action(message, galleries, |gallery| {
         let gallery = match gallery.to_gallery() {
             Ok(v) => v,
@@ -122,7 +122,7 @@ async fn cmd_full(message: &Update<Message>, galleries: &[InputGallery]) -> Resu
 }
 
 async fn cmd_update_tag(message: &Update<Message>, galleries: &[InputGallery]) -> Result<Message> {
-    info!("执行：/update_tag");
+    info!("执行命令: uptag {:?}", galleries);
     do_chain_action(message, galleries, |gallery| {
         let gallery = match gallery.to_gallery() {
             Ok(v) => v,
@@ -169,7 +169,7 @@ fn query_best_keyboard(from: i64, to: i64, offset: i64) -> InlineKeyboardMarkup 
 }
 
 async fn cmd_best(message: &Update<Message>, from: i64, to: i64) -> Result<Message> {
-    info!("执行：/best {} {}", from, to);
+    info!("执行命令: best {} {}", from, to);
     let text = query_best_text(from, to, 1)?;
     let reply_markup = query_best_keyboard(from, to, 1);
     Ok(message
@@ -180,13 +180,14 @@ async fn cmd_best(message: &Update<Message>, from: i64, to: i64) -> Result<Messa
 }
 
 /// 查询画廊，若失败则返回失败消息，成功则直接发送
-async fn cmd_query(message: &Update<Message>, gs: &[InputGallery]) -> Result<Message> {
-    let text = match gs.len() {
-        1 => gs[0]
+async fn cmd_query(message: &Update<Message>, galleries: &[InputGallery]) -> Result<Message> {
+    info!("执行命令: query {:?}", galleries);
+    let text = match galleries.len() {
+        1 => galleries[0]
             .to_gallery()
             .and_then(|g| cmd_query_rank(&g))
             .unwrap_or_else(|_| "未找到！".to_owned()),
-        _ => gs
+        _ => galleries
             .iter()
             .map(|g| {
                 g.to_gallery()
@@ -255,6 +256,7 @@ async fn message_handler(message: Update<Message>) -> Result<()> {
             }
         }
         Ok(Ping) => {
+            info!("执行命令：ping");
             to_delete.push(message.reply_to("pong").await?.id);
         }
         Ok(Full(g)) => {
@@ -279,7 +281,10 @@ async fn message_handler(message: Update<Message>) -> Result<()> {
             cmd_best(&message, *from, *to).await?;
         }
         // 收到无效命令则立即返回
-        Err(CommandError::NotACommand) => return Ok(()),
+        Err(CommandError::NotACommand) => {
+            warn!("无效命令：{:?}", message.update.text());
+            return Ok(());
+        }
     }
 
     // 对 query 和 best 命令的调用保留
@@ -299,6 +304,7 @@ async fn message_handler(message: Update<Message>) -> Result<()> {
         tokio::spawn(async move {
             sleep(time::Duration::from_secs(60)).await;
             for id in to_delete {
+                info!("清除消息 {}", id);
                 BOT.delete_message(chat_id, id).await.log_on_error().await;
             }
         });
@@ -311,7 +317,7 @@ async fn poll_handler(poll: Update<Poll>) -> Result<()> {
     let votes = options.iter().map(|s| s.voter_count).collect::<Vec<_>>();
     let score = wilson_score(&votes);
     let votes = serde_json::to_string(&votes)?;
-    debug!("投票状态变动：{} -> {}", poll.update.id, score);
+    info!("收到投票：{} -> {}", poll.update.id, score);
     DB.update_score(&poll.update.id, score, &votes)
 }
 
@@ -342,6 +348,7 @@ fn split_vec<T: FromStr>(s: &str) -> std::result::Result<Vec<T>, T::Err> {
 }
 
 async fn callback_change_page(message: &Message, cmd: &str, data: &str) -> Result<()> {
+    info!("翻页：{} {}", message.id, cmd);
     // vec![from, to, offset]
     let data = split_vec::<i64>(data)?;
     let [from, to, mut offset] = match TryInto::<[i64; 3]>::try_into(data) {
@@ -395,7 +402,7 @@ async fn callback_poll(message: &Message, user_id: i64, data: &str) -> Result<()
         _ => ret.map(|_| ()),
     }?;
     DB.update_score(&poll_id.to_string(), score, &serde_json::to_string(&votes)?)?;
-    debug!("投票状态变动：[{}] {} -> {}", user_id, poll_id, score);
+    info!("收到投票：[{}] {} -> {}", user_id, poll_id, score);
     Ok(())
 }
 
@@ -404,6 +411,7 @@ async fn callback_handler(callback: Update<CallbackQuery>) -> Result<()> {
     debug!("回调：{:?}", update.data);
 
     if let Some(d) = LIMIT.insert(update.from.id) {
+        warn!("用户 {} 操作频率过高", update.from.id);
         BOT.answer_callback_query(update.id)
             .text(format!("操作频率过高，请 {} 秒后再尝试", d.as_secs()))
             .show_alert(true)
@@ -436,7 +444,7 @@ async fn callback_handler(callback: Update<CallbackQuery>) -> Result<()> {
         "vote" => {
             callback_poll(&message, update.from.id, data).await?;
         }
-        _ => error!("未知指令：{}", cmd),
+        _ => warn!("未知指令：{}", cmd),
     };
     BOT.answer_callback_query(update.id).await?;
     Ok(())

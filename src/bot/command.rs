@@ -2,6 +2,7 @@ use crate::bot::utils::*;
 use crate::database::Gallery;
 use crate::*;
 use std::convert::TryInto;
+use std::fmt::{self, Debug, Formatter};
 use std::str::FromStr;
 use teloxide::types::Message;
 
@@ -12,7 +13,7 @@ pub enum CommandError {
     NotACommand,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq)]
 pub enum InputGallery {
     ExHentaiUrl(String),
     Gallery(Gallery),
@@ -23,6 +24,15 @@ impl InputGallery {
         match &self {
             Self::Gallery(g) => Ok(g.clone()),
             Self::ExHentaiUrl(s) => DB.query_gallery_by_url(&s),
+        }
+    }
+}
+
+impl Debug for InputGallery {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ExHentaiUrl(s) => f.debug_tuple("Url").field(&s).finish(),
+            Self::Gallery(g) => f.debug_tuple("Message").field(&g).finish(),
         }
     }
 }
@@ -72,7 +82,7 @@ impl RuaCommand {
             return Err(NotACommand);
         }
 
-        info!("收到命令：/{} {}", cmd, args);
+        debug!("收到命令：/{} {}", cmd, args);
 
         let is_admin = check_is_channel_admin(message);
 
