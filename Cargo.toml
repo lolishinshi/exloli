@@ -41,6 +41,7 @@ cached = "0.22.0"
 # 日志
 log = "0.4.11"
 env_logger = "0.7.1"
+dashmap = "4.0.2"
 
 [patch.crates-io]
 teloxide-core = { git = "https://github.com/Aloxaf/teloxide-core", branch = "patch" }

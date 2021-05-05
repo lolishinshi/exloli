@@ -12,6 +12,9 @@ use teloxide::types::*;
 use teloxide::{ApiError, RequestError};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
+static LIMIT: Lazy<RateLimiter<i64>> =
+    Lazy::new(|| RateLimiter::new(std::time::Duration::from_secs(60), 10));
+
 fn poll_keyboard(poll_id: i32, votes: &[i32; 5]) -> InlineKeyboardMarkup {
     let sum = votes.iter().sum::<i32>();
     let votes: Box<dyn Iterator<Item = f32>> = if sum == 0 {
@@ -392,13 +395,21 @@ async fn callback_poll(message: &Message, user_id: i64, data: &str) -> Result<()
         _ => ret.map(|_| ()),
     }?;
     DB.update_score(&poll_id.to_string(), score, &serde_json::to_string(&votes)?)?;
-    debug!("投票状态变动：{} -> {}", poll_id, score);
+    debug!("投票状态变动：[{}] {} -> {}", user_id, poll_id, score);
     Ok(())
 }
 
 async fn callback_handler(callback: Update<CallbackQuery>) -> Result<()> {
     let update = callback.update;
     debug!("回调：{:?}", update.data);
+
+    if let Some(d) = LIMIT.insert(update.from.id) {
+        BOT.answer_callback_query(update.id)
+            .text(format!("操作频率过高，请 {} 秒后再尝试", d.as_secs()))
+            .show_alert(true)
+            .await?;
+        return Ok(());
+    }
 
     let (cmd, data) = match update.data.as_ref().and_then(|v| {
         // TODO: split_once
