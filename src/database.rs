@@ -177,7 +177,8 @@ impl DataBase {
                     .and(gallery::score.ne(-1.0))
                     .and(gallery::poll_id.ne("")),
             )
-            .order_by(ordering)
+            .order_by((ordering, gallery::publish_date.desc()))
+            .group_by(gallery::poll_id)
             .offset(offset - 1)
             .limit(20)
             .load::<Gallery>(&self.pool.get()?)?)
