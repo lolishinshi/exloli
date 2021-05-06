@@ -38,7 +38,7 @@ static CONFIG: Lazy<Config> = Lazy::new(|| {
 });
 static BOT: Lazy<AutoSend<Bot>> =
     Lazy::new(|| teloxide::Bot::new(&CONFIG.telegram.token).auto_send());
-static DB: Lazy<DataBase> = Lazy::new(DataBase::init);
+static DB: Lazy<DataBase> = Lazy::new(|| DataBase::init().expect("数据库初始化失败"));
 static EXLOLI: Lazy<ExLoli> = Lazy::new(|| block_on(ExLoli::new()).expect("登录失败"));
 
 #[tokio::main]
@@ -59,34 +59,34 @@ async fn main() {
     }
 }
 
-async fn run() -> Result<(), Error> {
+fn init_args() -> getopts::Matches {
     let args = env::args().collect::<Vec<_>>();
     let mut opts = getopts::Options::new();
-    opts.optflag("", "debug", "调试模式");
-    opts.optflag("h", "help", "print this help menu");
+    opts.optflag("", "debug", "调试模式，不自动爬本");
+    opts.optflag("h", "help", "打印帮助");
     let matches = match opts.parse(&args[1..]) {
         Ok(v) => v,
         Err(e) => panic!("{}", e),
     };
-
     if matches.opt_present("h") {
         let brief = format!("Usage: {} [options]", args[0]);
         print!("{}", opts.usage(&brief));
-        return Ok(());
+        std::process::exit(0);
     }
+    matches
+}
+
+async fn run() -> Result<(), Error> {
+    let matches = init_args();
 
     env::var("DATABASE_URL").expect("请设置 DATABASE_URL");
 
-    DB.init_database()?;
+    let debug_mode = matches.opt_present("debug");
 
-    let debug = matches.opt_present("debug");
-
-    {
-        tokio::spawn(async move { crate::bot::start_bot().await });
-    }
+    tokio::spawn(async move { crate::bot::start_bot().await });
 
     loop {
-        if !debug {
+        if !debug_mode {
             info!("定时更新开始");
             let result = EXLOLI.scan_and_upload().await;
             if let Err(e) = result {

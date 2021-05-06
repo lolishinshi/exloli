@@ -47,22 +47,16 @@ pub struct DataBase {
 }
 
 impl DataBase {
-    pub fn init() -> Self {
-        info!("数据库建立连接中……");
+    pub fn init() -> Result<Self> {
+        info!("数据库初始化中……");
         let url = env::var("DATABASE_URL").expect("请设置 DATABASE_URL");
         let manager = ConnectionManager::new(url);
         let pool = Pool::builder()
             .max_size(16)
             .build(manager)
             .expect("连接池建立失败");
-        Self { pool }
-    }
-
-    pub fn init_database(&self) -> Result<()> {
-        info!("初始化数据库");
-        embedded_migrations::run(&self.pool.get()?)?;
-        embedded_migrations::run_with_output(&self.pool.get()?, &mut std::io::stdout())?;
-        Ok(())
+        embedded_migrations::run_with_output(&pool.get()?, &mut std::io::stdout())?;
+        Ok(Self { pool })
     }
 
     pub fn insert_image(&self, image_url: &str, uploaded_url: &str) -> Result<()> {
