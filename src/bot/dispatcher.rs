@@ -248,7 +248,7 @@ async fn message_handler(message: Update<Message>) -> Result<()> {
     let cmd = RuaCommand::parse(&message, &CONFIG.telegram.bot_id);
     match &cmd {
         Err(CommandError::WrongCommand(help)) => {
-            info!("错误的命令：{}", help);
+            warn!("错误的命令：{}", help);
             if !help.is_empty() {
                 to_delete.push(message.reply_to(*help).await?.id);
             } else {
@@ -281,10 +281,7 @@ async fn message_handler(message: Update<Message>) -> Result<()> {
             cmd_best(&message, *from, *to).await?;
         }
         // 收到无效命令则立即返回
-        Err(CommandError::NotACommand) => {
-            warn!("无效命令：{:?}", message.update.text());
-            return Ok(());
-        }
+        Err(CommandError::NotACommand) => return Ok(()),
     }
 
     // 对 query 和 best 命令的调用保留
@@ -437,6 +434,14 @@ async fn callback_handler(callback: Update<CallbackQuery>) -> Result<()> {
             return Ok(());
         }
     };
+
+    tokio::spawn({
+        let id = update.id;
+        async move {
+            BOT.answer_callback_query(id).await.log_on_error().await;
+        }
+    });
+
     match cmd {
         "<<" | ">>" | "<" | ">" => {
             callback_change_page(&message, cmd, data).await?;
@@ -446,7 +451,7 @@ async fn callback_handler(callback: Update<CallbackQuery>) -> Result<()> {
         }
         _ => warn!("未知指令：{}", cmd),
     };
-    BOT.answer_callback_query(update.id).await?;
+
     Ok(())
 }
 

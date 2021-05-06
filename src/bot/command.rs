@@ -32,7 +32,7 @@ impl Debug for InputGallery {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::ExHentaiUrl(s) => f.debug_tuple("Url").field(&s).finish(),
-            Self::Gallery(g) => f.debug_tuple("Message").field(&g).finish(),
+            Self::Gallery(g) => f.debug_tuple("Message").field(&g.message_id).finish(),
         }
     }
 }
