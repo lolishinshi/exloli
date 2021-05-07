@@ -68,15 +68,10 @@ impl RuaCommand {
             return Err(NotACommand);
         }
 
-        // TODO: split_once
-        let (cmd, args) = match text.find(|c| c == ' ' || c == '\n') {
-            Some(pos) => (&text[1..pos], text[pos + 1..].trim()),
-            _ => (&text[1..], ""),
-        };
-        let (cmd, bot) = match cmd.find('@') {
-            Some(pos) => (&cmd[..pos], &cmd[pos + 1..]),
-            None => (cmd, ""),
-        };
+        let (cmd, args) = text
+            .split_once(|c| c == ' ' || c == '\n')
+            .unwrap_or((text, ""));
+        let (cmd, bot) = cmd.split_once('@').unwrap_or((cmd, ""));
 
         if !bot.is_empty() && bot != bot_id {
             return Err(NotACommand);
