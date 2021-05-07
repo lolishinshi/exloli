@@ -51,7 +51,7 @@ max_img_cnt = 50
 # 超过多少天后更新的本子将重新发送消息
 outdate = 14
 # [可选] 代理
-proxy = "socsk5://127.0.0.1:1234"
+proxy = "socks5://127.0.0.1:1234"
 
 [telegraph]
 # telegraph 账号 token
@@ -61,7 +61,7 @@ author_name = "exloli"
 # 作者地址(通常为频道链接)
 author_url = "https://t.me/exlolicon"
 # [可选] 代理
-proxy = "socsk5://127.0.0.1:1234"
+proxy = "socks5://127.0.0.1:1234"
 
 [telegram]
 # telegram 频道 ID, 公共频道直接 @+频道名, 私有频道需要需要获取数字格式的 id
