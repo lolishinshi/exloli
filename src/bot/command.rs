@@ -72,6 +72,8 @@ impl RuaCommand {
             .split_once(|c| c == ' ' || c == '\n')
             .unwrap_or((text, ""));
         let (cmd, bot) = cmd.split_once('@').unwrap_or((cmd, ""));
+        // remove leading `/`
+        let cmd = &cmd[1..];
 
         if !bot.is_empty() && bot != bot_id {
             return Err(NotACommand);
