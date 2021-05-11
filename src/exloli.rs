@@ -142,8 +142,9 @@ impl ExLoli {
         let message = self.publish_to_telegram(&gallery, &page.url).await?;
 
         let poll_id = old_gallery
-            .map(|g| g.poll_id)
-            .unwrap_or_else(|_| message.id.to_string());
+            .ok()
+            .and_then(|g| (!g.poll_id.is_empty()).then(|| g.poll_id))
+            .unwrap_or_else(|| message.id.to_string());
         DB.insert_gallery(message.id, &gallery, page.url)?;
         DB.update_poll_id(message.id, &poll_id)
     }

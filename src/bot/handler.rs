@@ -10,33 +10,9 @@ use std::convert::TryInto;
 use std::future::Future;
 use teloxide::types::*;
 use teloxide::{ApiError, RequestError};
-use tokio_stream::wrappers::UnboundedReceiverStream;
 
 static LIMIT: Lazy<RateLimiter<i64>> =
     Lazy::new(|| RateLimiter::new(std::time::Duration::from_secs(60), 10));
-
-fn poll_keyboard(poll_id: i32, votes: &[i32; 5]) -> InlineKeyboardMarkup {
-    let sum = votes.iter().sum::<i32>();
-    let votes: Box<dyn Iterator<Item = f32>> = if sum == 0 {
-        Box::new([0.].iter().cloned().cycle())
-    } else {
-        Box::new(votes.iter().map(|&i| i as f32 / sum as f32 * 100.))
-    };
-
-    let options = ["我瞎了", "不咋样", "还行吧", "不错哦", "太棒了"]
-        .iter()
-        .zip(votes)
-        .enumerate()
-        .map(|(idx, (name, vote))| {
-            vec![InlineKeyboardButton::new(
-                format!("{:.0}% {}", vote, name),
-                InlineKeyboardButtonKind::CallbackData(format!("vote {} {}", poll_id, idx + 1)),
-            )]
-        })
-        .collect::<Vec<_>>();
-
-    InlineKeyboardMarkup::new(options)
-}
 
 async fn on_new_gallery(message: &Update<Message>) -> Result<()> {
     info!("频道消息更新，发送投票");
@@ -156,18 +132,6 @@ fn query_best_text(from: i64, to: i64, offset: i64) -> Result<String> {
     Ok(text)
 }
 
-fn query_best_keyboard(from: i64, to: i64, offset: i64) -> InlineKeyboardMarkup {
-    InlineKeyboardMarkup::new(vec![["<<", "<", ">", ">>"]
-        .iter()
-        .map(|&s| {
-            InlineKeyboardButton::new(
-                s,
-                InlineKeyboardButtonKind::CallbackData(format!("{} {} {} {}", s, from, to, offset)),
-            )
-        })
-        .collect::<Vec<_>>()])
-}
-
 async fn cmd_best(message: &Update<Message>, from: i64, to: i64) -> Result<Message> {
     info!("执行命令: best {} {}", from, to);
     let text = query_best_text(from, to, 1)?;
@@ -233,7 +197,7 @@ fn is_new_gallery(message: &Message) -> bool {
         .unwrap_or(false)
 }
 
-async fn message_handler(message: Update<Message>) -> Result<()> {
+pub async fn message_handler(message: Update<Message>) -> Result<()> {
     use RuaCommand::*;
 
     trace!("{:#?}", message.update);
@@ -309,7 +273,7 @@ async fn message_handler(message: Update<Message>) -> Result<()> {
     Ok(())
 }
 
-async fn poll_handler(poll: Update<Poll>) -> Result<()> {
+pub async fn poll_handler(poll: Update<Poll>) -> Result<()> {
     let options = poll.update.options;
     let votes = options.iter().map(|s| s.voter_count).collect::<Vec<_>>();
     let score = wilson_score(&votes);
@@ -318,7 +282,7 @@ async fn poll_handler(poll: Update<Poll>) -> Result<()> {
     DB.update_score(&poll.update.id, score, &votes)
 }
 
-async fn inline_handler(query: Update<InlineQuery>) -> Result<()> {
+pub async fn inline_handler(query: Update<InlineQuery>) -> Result<()> {
     let text = query.update.query.trim();
     info!("行内查询：{}", text);
     let mut answer = vec![];
@@ -403,7 +367,7 @@ async fn callback_poll(message: &Message, user_id: i64, data: &str) -> Result<()
     Ok(())
 }
 
-async fn callback_handler(callback: Update<CallbackQuery>) -> Result<()> {
+pub async fn callback_handler(callback: Update<CallbackQuery>) -> Result<()> {
     let update = callback.update;
     debug!("回调：{:?}", update.data);
 
@@ -416,10 +380,7 @@ async fn callback_handler(callback: Update<CallbackQuery>) -> Result<()> {
         return Ok(());
     }
 
-    let (cmd, data) = match update.data.as_ref().and_then(|v| {
-        // TODO: split_once
-        v.find(' ').map(|n| (&v[..n], &v[n + 1..]))
-    }) {
+    let (cmd, data) = match update.data.as_ref().and_then(|v| v.split_once(' ')) {
         Some(v) => v,
         None => return Ok(()),
     };
@@ -453,32 +414,4 @@ async fn callback_handler(callback: Update<CallbackQuery>) -> Result<()> {
     };
 
     Ok(())
-}
-
-pub async fn start_bot() {
-    info!("BOT 启动");
-    type DispatcherHandler<T> = DispatcherHandlerRx<AutoSend<Bot>, T>;
-    Dispatcher::new(BOT.clone())
-        .messages_handler(|rx: DispatcherHandler<Message>| {
-            UnboundedReceiverStream::new(rx).for_each_concurrent(8, |message| async {
-                message_handler(message).await.log_on_error().await;
-            })
-        })
-        .polls_handler(|rx: DispatcherHandler<Poll>| {
-            UnboundedReceiverStream::new(rx).for_each_concurrent(8, |message| async {
-                poll_handler(message).await.log_on_error().await;
-            })
-        })
-        .inline_queries_handler(|rx: DispatcherHandler<InlineQuery>| {
-            UnboundedReceiverStream::new(rx).for_each_concurrent(8, |message| async {
-                inline_handler(message).await.log_on_error().await;
-            })
-        })
-        .callback_queries_handler(|rx: DispatcherHandler<CallbackQuery>| {
-            UnboundedReceiverStream::new(rx).for_each_concurrent(8, |message| async {
-                callback_handler(message).await.log_on_error().await;
-            })
-        })
-        .dispatch()
-        .await;
 }

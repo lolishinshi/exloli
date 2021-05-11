@@ -115,6 +115,41 @@ where
     )
 }
 
+pub fn poll_keyboard(poll_id: i32, votes: &[i32; 5]) -> InlineKeyboardMarkup {
+    let sum = votes.iter().sum::<i32>();
+    let votes: Box<dyn Iterator<Item = f32>> = if sum == 0 {
+        Box::new([0.].iter().cloned().cycle())
+    } else {
+        Box::new(votes.iter().map(|&i| i as f32 / sum as f32 * 100.))
+    };
+
+    let options = ["我瞎了", "不咋样", "还行吧", "不错哦", "太棒了"]
+        .iter()
+        .zip(votes)
+        .enumerate()
+        .map(|(idx, (name, vote))| {
+            vec![InlineKeyboardButton::new(
+                format!("{:.0}% {}", vote, name),
+                InlineKeyboardButtonKind::CallbackData(format!("vote {} {}", poll_id, idx + 1)),
+            )]
+        })
+        .collect::<Vec<_>>();
+
+    InlineKeyboardMarkup::new(options)
+}
+
+pub fn query_best_keyboard(from: i64, to: i64, offset: i64) -> InlineKeyboardMarkup {
+    InlineKeyboardMarkup::new(vec![["<<", "<", ">", ">>"]
+        .iter()
+        .map(|&s| {
+            InlineKeyboardButton::new(
+                s,
+                InlineKeyboardButtonKind::CallbackData(format!("{} {} {} {}", s, from, to, offset)),
+            )
+        })
+        .collect::<Vec<_>>()])
+}
+
 /// 威尔逊得分
 /// 基于：https://www.jianshu.com/p/4d2b45918958
 pub fn wilson_score(votes: &[i32]) -> f32 {
