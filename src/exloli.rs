@@ -141,12 +141,13 @@ impl ExLoli {
         // 不需要原地更新的旧本子，发布新消息
         let message = self.publish_to_telegram(&gallery, &page.url).await?;
 
+        // 生成 poll_id，仅当旧画廊使用的新格式 poll_id 的情况下才会继承
         let poll_id = old_gallery
-            .ok()
-            .and_then(|g| (!g.poll_id.is_empty()).then(|| g.poll_id))
-            .unwrap_or_else(|| message.id.to_string());
+            .and_then(|g| g.poll_id.parse::<i32>().map_err(anyhow::Error::new))
+            .unwrap_or(message.id);
+
         DB.insert_gallery(message.id, &gallery, page.url)?;
-        DB.update_poll_id(message.id, &poll_id)
+        DB.update_poll_id(message.id, &poll_id.to_string())
     }
 
     /// 原地更新画廊，若 gallery 为 None 则原地更新为原画廊的完整版
