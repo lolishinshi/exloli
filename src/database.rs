@@ -227,10 +227,10 @@ impl DataBase {
         Ok(ret)
     }
 
-    pub fn update_score(&self, poll_id: &str, score: f32, votes: &str) -> Result<()> {
+    pub fn update_score<S: AsRef<str>>(&self, poll_id: &str, score: f32, votes: S) -> Result<()> {
         diesel::update(gallery::table)
             .filter(gallery::poll_id.eq(poll_id))
-            .set((gallery::score.eq(score), gallery::votes.eq(votes)))
+            .set((gallery::score.eq(score), gallery::votes.eq(votes.as_ref())))
             .execute(&self.pool.get()?)?;
         Ok(())
     }

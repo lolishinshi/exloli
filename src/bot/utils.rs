@@ -7,6 +7,7 @@ use regex::Regex;
 use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::hash::Hash;
+use std::ops::Deref;
 use std::time::{Duration, Instant};
 use teloxide::prelude::*;
 use teloxide::types::*;
@@ -150,28 +151,54 @@ pub fn query_best_keyboard(from: i64, to: i64, offset: i64) -> InlineKeyboardMar
         .collect::<Vec<_>>()])
 }
 
-/// 威尔逊得分
-/// 基于：https://www.jianshu.com/p/4d2b45918958
-pub fn wilson_score(votes: &[i32]) -> f32 {
-    let base = [0., 0.25, 0.5, 0.75, 1.];
-    let votes = votes.to_owned();
-    let count = votes.iter().sum::<i32>() as f32;
-    if count == 0. {
-        return 0.;
-    }
-    let mean = Iterator::zip(votes.iter(), base.iter())
-        .map(|(&a, &b)| a as f32 * b)
-        .sum::<f32>()
-        / count;
-    let var = Iterator::zip(votes.iter(), base.iter())
-        .map(|(&a, &b)| (mean - b).powi(2) * a as f32)
-        .sum::<f32>()
-        / count;
-    // 80% 置信度
-    let z = 1.281f32;
+pub struct Vote([i32; 5]);
 
-    (mean + z.powi(2) / (2. * count) - ((z / (2. * count)) * (4. * count * var + z.powi(2)).sqrt()))
-        / (1. + z.powi(2) / count)
+impl Vote {
+    pub fn new(vote: [i32; 5]) -> Self {
+        Self(vote)
+    }
+
+    pub fn score(&self) -> f32 {
+        Self::wilson_score(&self.0)
+    }
+
+    /// 威尔逊得分
+    /// 基于：https://www.jianshu.com/p/4d2b45918958
+    pub fn wilson_score(votes: &[i32]) -> f32 {
+        let base = [0., 0.25, 0.5, 0.75, 1.];
+        let count = votes.iter().sum::<i32>() as f32;
+        if count == 0. {
+            return 0.;
+        }
+        let mean = Iterator::zip(votes.iter(), base.iter())
+            .map(|(&a, &b)| a as f32 * b)
+            .sum::<f32>()
+            / count;
+        let var = Iterator::zip(votes.iter(), base.iter())
+            .map(|(&a, &b)| (mean - b).powi(2) * a as f32)
+            .sum::<f32>()
+            / count;
+        // 80% 置信度
+        let z = 1.281f32;
+
+        (mean + z.powi(2) / (2. * count)
+            - ((z / (2. * count)) * (4. * count * var + z.powi(2)).sqrt()))
+            / (1. + z.powi(2) / count)
+    }
+
+    /// 给用户展示的信息
+    pub fn info(&self) -> String {
+        let cnt = self.0.iter().sum::<i32>();
+        let score = self.score();
+        format!("当前 {} 人投票，{:.2} 分", cnt, score * 100.)
+    }
+}
+
+impl Deref for Vote {
+    type Target = [i32; 5];
+    fn deref(&self) -> &[i32; 5] {
+        &self.0
+    }
 }
 
 /// 一个用于限制请求频率的数据结构

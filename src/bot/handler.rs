@@ -22,8 +22,9 @@ async fn on_new_gallery(message: &Update<Message>) -> Result<()> {
         .await?;
     let message_id = *message.update.forward_from_message_id().unwrap();
     let poll_id = DB.query_poll_id(message_id)?.parse::<i32>()?;
-    let options = poll_keyboard(poll_id, &[0, 0, 0, 0, 0]);
-    BOT.send_message(message.update.chat.id, "当前 0 人投票，0 分")
+    let votes = Vote::new(DB.query_vote(poll_id)?);
+    let options = poll_keyboard(poll_id, &*votes);
+    BOT.send_message(message.update.chat.id, votes.info())
         .reply_markup(options)
         .reply_to_message_id(message.update.id)
         .await?;
@@ -276,10 +277,10 @@ pub async fn message_handler(message: Update<Message>) -> Result<()> {
 pub async fn poll_handler(poll: Update<Poll>) -> Result<()> {
     let options = poll.update.options;
     let votes = options.iter().map(|s| s.voter_count).collect::<Vec<_>>();
-    let score = wilson_score(&votes);
+    let score = Vote::wilson_score(&votes);
     let votes = serde_json::to_string(&votes)?;
     info!("收到投票：{} -> {}", poll.update.id, score);
-    DB.update_score(&poll.update.id, score, &votes)
+    DB.update_score(&poll.update.id, score, votes)
 }
 
 pub async fn inline_handler(query: Update<InlineQuery>) -> Result<()> {
@@ -339,19 +340,11 @@ async fn callback_poll(message: &Message, user_id: i64, data: &str) -> Result<()
         _ => return Ok(()),
     };
     DB.insert_vote(user_id, poll_id, option)?;
-    let votes = DB.query_vote(poll_id)?;
-    let reply = poll_keyboard(poll_id, &votes);
-    let score = wilson_score(&votes);
+    let votes = Vote::new(DB.query_vote(poll_id)?);
+    let reply = poll_keyboard(poll_id, &*votes);
+    let score = votes.score();
     let ret = BOT
-        .edit_message_text(
-            message.chat.id,
-            message.id,
-            &format!(
-                "当前投票 {} 人，{:.2} 分",
-                votes.iter().sum::<i32>(),
-                score * 100.
-            ),
-        )
+        .edit_message_text(message.chat.id, message.id, votes.info())
         .reply_markup(reply)
         .await;
     // 用户可能会点多次相同选项，此时会产生一个 MessageNotModified 的错误
@@ -362,7 +355,7 @@ async fn callback_poll(message: &Message, user_id: i64, data: &str) -> Result<()
         }) => Ok(()),
         _ => ret.map(|_| ()),
     }?;
-    DB.update_score(&poll_id.to_string(), score, &serde_json::to_string(&votes)?)?;
+    DB.update_score(&poll_id.to_string(), score, serde_json::to_string(&*votes)?)?;
     info!("收到投票：[{}] {} -> {}", user_id, poll_id, score);
     Ok(())
 }
