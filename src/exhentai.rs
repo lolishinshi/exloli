@@ -1,18 +1,16 @@
-use crate::utils::HOST;
+use crate::utils::{download_to_temp, HOST};
 use crate::xpath::parse_html;
 use crate::{CONFIG, DB};
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use futures::executor::block_on;
 use futures::prelude::*;
 use once_cell::sync::Lazy;
 use reqwest::header::{self, HeaderMap, HeaderValue};
 use reqwest::{redirect::Policy, Client, Proxy, Response};
 use telegraph_rs::Telegraph;
-use tempfile::NamedTempFile;
 use tokio::task::block_in_place;
 use tokio::time::sleep;
 
-use std::io::Write;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -199,14 +197,18 @@ impl<'a> FullGalleryInfo<'a> {
         // TODO: 避免一次 clone？
         let get_url = |url: String| async move {
             update_progress();
+            let mut err = None;
             for _ in 0..5i32 {
                 match self.upload_image(&url, &client_ref).await {
                     Ok(v) => return Ok(v),
-                    Err(e) => error!("获取图片地址失败：{}", e),
+                    Err(e) => {
+                        error!("获取图片地址失败：{}", e);
+                        err = Some(e);
+                    }
                 }
                 sleep(Duration::from_secs(10)).await;
             }
-            Err(format_err!("无法获图片地址"))
+            Err(err.unwrap().context("无法获取图片地址"))
         };
 
         // TODO: 能不能 iter(img_pages)
@@ -238,16 +240,22 @@ impl<'a> FullGalleryInfo<'a> {
         }
 
         debug!("下载图片中：{}", &url);
+        let file = download_to_temp(client, &url).await?;
+        let file = file.path();
 
-        let bytes = client.get(&url).send().and_then(Response::bytes).await?;
-        let mut tmp = NamedTempFile::new()?;
-        tmp.write_all(bytes.as_ref())?;
-        let file = tmp.path().to_owned();
+        // telegraph 对图片的体积 & 大小有要求
+        if file.metadata()?.len() > 5 * 1024 * 1024 {
+            return Ok("".to_owned());
+        }
+        let (width, height) = image::io::Reader::open(&file)?.into_dimensions()?;
+        if height * 10 <= width || width * 20 <= height {
+            return Ok("".to_owned());
+        }
 
         debug!("上传图片中...");
         let mut result = Telegraph::upload_with(&[file], &client)
             .await
-            .map_err(|e| anyhow!("上传 telegraph 失败：{}", e))?;
+            .context("上传 Telegraph  失败")?;
         let ret = result.swap_remove(0).src;
 
         debug!("记录缓存...");

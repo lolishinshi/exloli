@@ -1,7 +1,7 @@
-use anyhow::{format_err, Error};
+use anyhow::{Context, Error};
 use libxml::parser::Parser;
 use libxml::tree::{self, Document, NodeType};
-use libxml::xpath::Context;
+use libxml::xpath::Context as XContext;
 use std::{fmt, ops::Deref, rc::Rc};
 
 #[derive(Debug)]
@@ -29,7 +29,7 @@ impl Value {
 
 pub struct Node {
     document: Rc<Document>,
-    context: Rc<Context>,
+    context: Rc<XContext>,
     node: tree::Node,
 }
 
@@ -51,14 +51,14 @@ impl Node {
     pub fn xpath_text(&self, xpath: &str) -> Result<Vec<String>, Error> {
         match self.xpath(xpath)?.into_text() {
             Some(v) => Ok(v),
-            None => Err(format_err!("not found: {}", xpath)),
+            None => Err(anyhow!("not found: {}", xpath)),
         }
     }
 
     pub fn xpath_elem(&self, xpath: &str) -> Result<Vec<Node>, Error> {
         match self.xpath(xpath)?.into_element() {
             Some(v) => Ok(v),
-            None => Err(format_err!("not found: {}", xpath)),
+            None => Err(anyhow!("not found: {}", xpath)),
         }
     }
 
@@ -66,7 +66,7 @@ impl Node {
         let nodes = self
             .context
             .node_evaluate(xpath, &self.node)
-            .map_err(|_| format_err!("failed to evaluate xpath: {}", xpath))?
+            .map_err(|_| anyhow!("failed to evaluate xpath: {}", xpath))?
             .get_nodes_as_vec();
         let result = match nodes.get(0) {
             Some(node) => match node.get_type() {
@@ -103,9 +103,9 @@ pub fn parse_html<S: AsRef<str>>(html: S) -> Result<Node, Error> {
     let parser = Parser::default_html();
     let document = parser
         .parse_string(html.as_ref())
-        .map_err(|e| format_err!("failed to parse html: {}", e))?;
-    let context = Context::new(&document).map_err(|_| format_err!("failed to new context"))?;
-    let root = document.get_root_element().expect("no root element");
+        .context("failed to parse html")?;
+    let context = XContext::new(&document).map_err(|_| anyhow!("failed to new context"))?;
+    let root = document.get_root_element().context("no root element")?;
     Ok(Node {
         document: Rc::new(document),
         context: Rc::new(context),

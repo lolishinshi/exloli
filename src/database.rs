@@ -1,7 +1,7 @@
 use crate::exhentai::*;
 use crate::schema::*;
 use crate::utils::*;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono::prelude::*;
 use diesel::dsl::sql;
 use diesel::prelude::*;
@@ -60,8 +60,7 @@ impl DataBase {
     }
 
     pub fn insert_image(&self, image_url: &str, uploaded_url: &str) -> Result<()> {
-        let fileindex =
-            get_id_from_image(image_url).ok_or_else(|| anyhow!("fileindex 提取失败"))?;
+        let fileindex = get_id_from_image(image_url).context("fileindex 提取失败")?;
         let img = Image {
             url: uploaded_url.to_owned(),
             fileindex,
@@ -73,8 +72,7 @@ impl DataBase {
     }
 
     pub fn query_image_by_url(&self, image_url: &str) -> Result<Image> {
-        let fileindex =
-            get_id_from_image(image_url).ok_or_else(|| anyhow!("fileindex 提取失败"))?;
+        let fileindex = get_id_from_image(image_url).context("fileindex 提取失败")?;
         Ok(images::table
             .filter(images::fileindex.eq(fileindex))
             .get_result::<Image>(&self.pool.get()?)?)

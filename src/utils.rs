@@ -1,9 +1,14 @@
 use crate::trans::TRANS;
 use crate::CONFIG;
+use anyhow::Context;
+use futures::TryFutureExt;
 use once_cell::sync::Lazy;
 use regex::Regex;
+use reqwest::{Client, Response};
 use std::borrow::Cow;
+use std::io::Write;
 use std::time::SystemTime;
+use tempfile::NamedTempFile;
 
 pub static HOST: Lazy<&'static str> = Lazy::new(|| {
     CONFIG
@@ -17,6 +22,7 @@ pub static HOST: Lazy<&'static str> = Lazy::new(|| {
 pub fn img_urls_to_html(img_urls: &[String]) -> String {
     img_urls
         .iter()
+        .filter(|s| !s.is_empty())
         .map(|s| format!(r#"<img src="{}">"#, s))
         .collect::<Vec<_>>()
         .join("")
@@ -100,4 +106,16 @@ pub fn extract_telegraph_path(s: &str) -> &str {
         .last()
         .and_then(|s| s.split('?').next())
         .unwrap()
+}
+
+pub async fn download_to_temp(client: &Client, url: &str) -> anyhow::Result<NamedTempFile> {
+    let bytes = client.get(url).send().and_then(Response::bytes).await?;
+    let suffix = String::from(".") + url.rsplit_once('.').context("找不到图片后缀")?.1;
+    let mut tmp = tempfile::Builder::new()
+        .prefix("exloli_")
+        .suffix(&suffix)
+        .rand_bytes(5)
+        .tempfile()?;
+    tmp.write_all(bytes.as_ref())?;
+    Ok(tmp)
 }
