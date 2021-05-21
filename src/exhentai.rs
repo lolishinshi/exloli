@@ -29,6 +29,8 @@ macro_rules! send {
     };
 }
 
+pub static EXHENTAI: Lazy<ExHentai> =
+    Lazy::new(|| block_on(CONFIG.init_exhentai()).expect("登陆失败"));
 static REFERER: Lazy<String> = Lazy::new(|| format!("https://{}/", *HOST));
 static HEADERS: Lazy<HeaderMap> = Lazy::new(|| {
     set_header! {

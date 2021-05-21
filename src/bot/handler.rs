@@ -5,7 +5,7 @@ use crate::utils::get_message_url;
 use crate::*;
 use anyhow::{Context, Result};
 use chrono::{Duration, Utc};
-use futures::FutureExt;
+use futures::{FutureExt, TryFutureExt};
 use std::convert::TryInto;
 use std::future::Future;
 use teloxide::types::*;
@@ -89,7 +89,7 @@ async fn cmd_upload(message: &Update<Message>, urls: &[String]) -> Result<Messag
 async fn cmd_full(message: &Update<Message>, galleries: &[InputGallery]) -> Result<Message> {
     info!("执行命令: full {:?}", galleries);
     do_chain_action(message, galleries, |gallery| {
-        let gallery = match gallery.to_gallery() {
+        let gallery = match block_on(gallery.to_gallery()) {
             Ok(v) => v,
             _ => return async { Ok(None) }.boxed(),
         };
@@ -101,7 +101,7 @@ async fn cmd_full(message: &Update<Message>, galleries: &[InputGallery]) -> Resu
 async fn cmd_update_tag(message: &Update<Message>, galleries: &[InputGallery]) -> Result<Message> {
     info!("执行命令: uptag {:?}", galleries);
     do_chain_action(message, galleries, |gallery| {
-        let gallery = match gallery.to_gallery() {
+        let gallery = match block_on(gallery.to_gallery()) {
             Ok(v) => v,
             _ => return async { Ok(None) }.boxed(),
         };
@@ -150,17 +150,16 @@ async fn cmd_query(message: &Update<Message>, galleries: &[InputGallery]) -> Res
     let text = match galleries.len() {
         1 => galleries[0]
             .to_gallery()
+            .await
             .and_then(|g| cmd_query_rank(&g))
             .unwrap_or_else(|_| "未找到！".to_owned()),
-        _ => galleries
-            .iter()
-            .map(|g| {
-                g.to_gallery()
-                    .map(|g| get_message_url(g.message_id))
-                    .unwrap_or_else(|_| "未找到！".to_owned())
-            })
-            .collect::<Vec<_>>()
-            .join("\n"),
+        _ => futures::future::join_all(galleries.iter().map(|g| {
+            g.to_gallery()
+                .and_then(|g| async move { Ok(get_message_url(g.message_id)) })
+                .unwrap_or_else(|_| "未找到！".to_owned())
+        }))
+        .await
+        .join("\n"),
     };
     Ok(message
         .reply_to(text)

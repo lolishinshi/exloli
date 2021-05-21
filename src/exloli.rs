@@ -11,25 +11,20 @@ use teloxide::types::ParseMode;
 use v_htmlescape::escape;
 
 pub struct ExLoli {
-    exhentai: ExHentai,
     telegraph: Telegraph,
 }
 
 impl ExLoli {
     pub async fn new() -> Result<Self> {
-        let exhentai = CONFIG.init_exhentai().await?;
         let telegraph = CONFIG.init_telegraph().await?;
-        Ok(ExLoli {
-            exhentai,
-            telegraph,
-        })
+        Ok(ExLoli { telegraph })
     }
 
     /// 根据配置文件自动扫描并上传本子
     pub async fn scan_and_upload(&self) -> Result<()> {
         // 筛选最新本子
         let page_limit = CONFIG.exhentai.max_pages;
-        let galleries = self.exhentai.search_n_pages(page_limit).await?;
+        let galleries = EXHENTAI.search_n_pages(page_limit).await?;
 
         // 从后往前爬, 保持顺序
         for gallery in galleries.into_iter().rev() {
@@ -83,7 +78,7 @@ impl ExLoli {
 
     /// 上传指定 URL 的画廊
     pub async fn upload_gallery_by_url(&self, url: &str) -> Result<()> {
-        let mut gallery = self.exhentai.get_gallery_by_url(url).await?;
+        let mut gallery = EXHENTAI.get_gallery_by_url(url).await?;
         gallery.limit = false;
         self.upload_gallery(gallery).await
     }
@@ -95,7 +90,7 @@ impl ExLoli {
         let mut gallery = basic_info.clone().into_full_info().await?;
 
         // 判断是否上传过历史版本
-        let old_gallery = self.get_history_upload(&gallery).await;
+        let old_gallery = Self::get_history_upload(&gallery).await;
         match &old_gallery {
             Ok(g) => {
                 // 上传量已经达到限制的，不做更新
@@ -160,8 +155,7 @@ impl ExLoli {
         let gallery = match gallery {
             Some(v) => v,
             None => {
-                let mut gallery: FullGalleryInfo = self
-                    .exhentai
+                let mut gallery: FullGalleryInfo = EXHENTAI
                     .get_gallery_by_url(ogallery.get_url())
                     .and_then(|g| g.into_full_info())
                     .await?;
@@ -199,7 +193,7 @@ impl ExLoli {
             None => {
                 // fuck lifetime
                 _g = Some(
-                    self.exhentai
+                    EXHENTAI
                         .get_gallery_by_url(&url)
                         .and_then(|g| g.into_full_info())
                         .await?,
@@ -311,13 +305,13 @@ impl ExLoli {
 
 impl ExLoli {
     /// 获取画廊的历史上传
-    async fn get_history_upload<'a>(&self, gallery: &FullGalleryInfo<'a>) -> Result<Gallery> {
+    pub async fn get_history_upload<'a>(gallery: &FullGalleryInfo<'a>) -> Result<Gallery> {
         let mut gallery_url = Some(gallery.url.clone());
         while let Some(url) = &gallery_url {
             match DB.query_gallery_by_url(url) {
                 Ok(v) => return Ok(v),
                 _ => {
-                    let gallery = self.exhentai.get_gallery_by_url(url).await?;
+                    let gallery = EXHENTAI.get_gallery_by_url(url).await?;
                     let parent = gallery.into_full_info().await?;
                     gallery_url = parent.parent;
                 }

@@ -1,6 +1,8 @@
 use crate::bot::utils::*;
 use crate::database::Gallery;
+use crate::exhentai::EXHENTAI;
 use crate::*;
+use futures::TryFutureExt;
 use std::convert::TryInto;
 use std::fmt::{self, Debug, Formatter};
 use std::str::FromStr;
@@ -20,10 +22,20 @@ pub enum InputGallery {
 }
 
 impl InputGallery {
-    pub fn to_gallery(&self) -> anyhow::Result<Gallery> {
+    /// 转换为 `Gallery`，会自动请求历史画廊
+    pub async fn to_gallery(&self) -> anyhow::Result<Gallery> {
         match &self {
             Self::Gallery(g) => Ok(g.clone()),
-            Self::ExHentaiUrl(s) => DB.query_gallery_by_url(&s),
+            Self::ExHentaiUrl(s) => match DB.query_gallery_by_url(&s) {
+                Err(_) => {
+                    let gallery = EXHENTAI
+                        .get_gallery_by_url(s)
+                        .and_then(|g| g.into_full_info())
+                        .await?;
+                    Ok(ExLoli::get_history_upload(&gallery).await?)
+                }
+                v => v,
+            },
         }
     }
 }
