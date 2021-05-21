@@ -36,7 +36,7 @@ static HEADERS: Lazy<HeaderMap> = Lazy::new(|| {
         ACCEPT_ENCODING => "gzip, deflate, br",
         ACCEPT_LANGUAGE => "zh-CN,en-US;q=0.7,en;q=0.3",
         CACHE_CONTROL => "max-age=0",
-        DNT => "1",
+        CONNECTION => "keep-alive",
         HOST => *HOST,
         REFERER => &*REFERER,
         UPGRADE_INSECURE_REQUESTS => "1",
@@ -189,7 +189,11 @@ impl<'a> FullGalleryInfo<'a> {
 
         let mut client_builder = Client::builder().timeout(Duration::from_secs(30));
         if let Some(proxy) = &CONFIG.telegraph.proxy {
-            client_builder = client_builder.proxy(Proxy::all(proxy)?);
+            client_builder = client_builder
+                .proxy(Proxy::custom(move |url| {
+                    (url.host_str() == Some("api.telegra.ph")).then(|| proxy.clone())
+                }))
+                .proxy(Proxy::all(proxy)?);
         }
         let client = client_builder.build()?;
         let client_ref = &client;

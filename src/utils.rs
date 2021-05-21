@@ -4,6 +4,7 @@ use anyhow::Context;
 use futures::TryFutureExt;
 use once_cell::sync::Lazy;
 use regex::Regex;
+use reqwest::header::*;
 use reqwest::{Client, Response};
 use std::borrow::Cow;
 use std::io::Write;
@@ -109,7 +110,13 @@ pub fn extract_telegraph_path(s: &str) -> &str {
 }
 
 pub async fn download_to_temp(client: &Client, url: &str) -> anyhow::Result<NamedTempFile> {
-    let bytes = client.get(url).send().and_then(Response::bytes).await?;
+    let bytes = client
+        .get(url)
+        .header(CONNECTION, "keep-alive")
+        .header(REFERER, "https://exhentai.org/")
+        .send()
+        .and_then(Response::bytes)
+        .await?;
     let suffix = String::from(".") + url.rsplit_once('.').context("找不到图片后缀")?.1;
     let mut tmp = tempfile::Builder::new()
         .prefix("exloli_")
