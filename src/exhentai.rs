@@ -191,11 +191,9 @@ impl<'a> FullGalleryInfo<'a> {
 
         let mut client_builder = Client::builder().timeout(Duration::from_secs(30));
         if let Some(proxy) = &CONFIG.telegraph.proxy {
-            client_builder = client_builder
-                .proxy(Proxy::custom(move |url| {
-                    (url.host_str() == Some("api.telegra.ph")).then(|| proxy.clone())
-                }))
-                .proxy(Proxy::all(proxy)?);
+            client_builder = client_builder.proxy(Proxy::custom(move |url| {
+                (url.host_str() == Some("api.telegra.ph")).then(|| proxy.clone())
+            }));
         }
         let client = client_builder.build()?;
         let client_ref = &client;
