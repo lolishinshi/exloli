@@ -60,11 +60,16 @@ where
 {
     let mut text = "收到命令，执行中……".to_owned();
     let mut reply_message = message.reply_to(&text).await?;
+    let mut fail_cnt = 0;
     for (idx, entry) in input.iter().enumerate() {
         let message = match action(&entry).await {
             Ok(Some(_)) => format!("\n第 {} 本 - 成功", idx + 1),
             Ok(None) => format!("\n第 {} 本 - 无上传记录", idx + 1),
-            Err(e) => format!("\n第 {} 本 - 失败：{}", idx + 1, e),
+            Err(e) => {
+                let source = e.source().map(|e| e.to_string()).unwrap_or_default();
+                fail_cnt += 1;
+                format!("\n第 {} 本 - 失败：{} => {}", idx + 1, e, source)
+            }
         };
         text.push_str(&message);
         reply_message = BOT
@@ -72,8 +77,16 @@ where
             .await?;
     }
     text.push_str("\n执行完毕");
+    if fail_cnt > 0 {
+        text.push_str(&format!(
+            "，失败 {} 个<a href=\"tg://user?id={}\">\u{200b}</a>",
+            fail_cnt,
+            message.update.from().map(|u| u.id).unwrap_or_default()
+        ));
+    }
     Ok(BOT
         .edit_message_text(reply_message.chat.id, reply_message.id, text)
+        .parse_mode(ParseMode::Html)
         .await?)
 }
 
@@ -242,14 +255,14 @@ pub async fn message_handler(message: Update<Message>) -> Result<()> {
             cmd_query(&message, gs).await?;
         }
         Ok(Best([from, to])) => {
-            cmd_best(&message, *from, *to).await?;
+            to_delete.push(cmd_best(&message, *from, *to).await?.id);
         }
         // 收到无效命令则立即返回
         Err(CommandError::NotACommand) => return Ok(()),
     }
 
     // 对 query 和 best 命令的调用保留
-    if matches!(cmd, Ok(Query(_)) | Ok(Best(_))) {
+    if matches!(cmd, Ok(Query(_))) {
         to_delete.clear();
     }
     // 没有直接回复画廊的 upload full update_tag 则保留
@@ -263,7 +276,7 @@ pub async fn message_handler(message: Update<Message>) -> Result<()> {
     if !to_delete.is_empty() && message.update.is_from_my_group() {
         let chat_id = message.chat_id();
         tokio::spawn(async move {
-            sleep(time::Duration::from_secs(60)).await;
+            sleep(time::Duration::from_secs(300)).await;
             for id in to_delete {
                 info!("清除消息 {}", id);
                 BOT.delete_message(chat_id, id).await.log_on_error().await;

@@ -26,6 +26,7 @@ table! {
         user_id -> BigInt,
         poll_id -> Integer,
         option -> Integer,
+        vote_time -> Timestamp,
     }
 }
 

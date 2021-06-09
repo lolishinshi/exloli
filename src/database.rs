@@ -34,14 +34,6 @@ pub struct Image {
     pub url: String,
 }
 
-#[derive(Queryable, Insertable)]
-#[table_name = "user_vote"]
-pub struct UserVote {
-    user_id: i64,
-    poll_id: i32,
-    option: i32,
-}
-
 pub struct DataBase {
     pool: Pool<ConnectionManager<SqliteConnection>>,
 }
@@ -208,6 +200,7 @@ impl DataBase {
                 user_vote::user_id.eq(user_id),
                 user_vote::poll_id.eq(poll_id),
                 user_vote::option.eq(option),
+                user_vote::vote_time.eq(Utc::now().naive_utc()),
             )])
             .execute(&*self.pool.get()?)?;
         Ok(())
