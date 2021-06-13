@@ -15,6 +15,13 @@ table! {
 }
 
 table! {
+    image_hash (hash) {
+        hash -> Text,
+        url -> Text,
+    }
+}
+
+table! {
     images (fileindex) {
         fileindex -> Integer,
         url -> Text,
@@ -32,6 +39,7 @@ table! {
 
 allow_tables_to_appear_in_same_query!(
     gallery,
+    image_hash,
     images,
     user_vote,
 );

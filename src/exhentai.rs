@@ -230,17 +230,26 @@ impl<'a> FullGalleryInfo<'a> {
     }
 
     /// 上传指定的图片并返回上传后的地址
-    pub async fn upload_image(&self, url: &str, client: &Client) -> Result<String> {
-        debug!("获取图片真实地址中：{}", url);
-        let response = send!(self.client.get(url))?;
+    pub async fn upload_image(&self, page_url: &str, client: &Client) -> Result<String> {
+        debug!("获取图片真实地址中：{}", page_url);
+        let response = send!(self.client.get(page_url))?;
+
+        // 第一次查询，查询 image_hash
+        if let Ok(url) = DB.query_image_by_hash(&page_url) {
+            trace!("找到缓存!");
+            return Ok(url);
+        }
 
         let url = parse_html(response.text().await?)?
             .xpath_text(r#"//img[@id="img"]/@src"#)?
             .swap_remove(0);
 
-        if let Ok(image) = DB.query_image_by_url(&url) {
+        // 第二次查询，查询 images，此为历史遗留问题
+        // 一段时间后应该可以移除 images 表
+        if let Ok(url) = DB.query_image_by_fileindex(&url) {
+            DB.insert_image(&page_url, &url)?;
             trace!("找到缓存!");
-            return Ok(image.url);
+            return Ok(url);
         }
 
         debug!("下载图片中：{}", &url);
@@ -263,7 +272,7 @@ impl<'a> FullGalleryInfo<'a> {
         let ret = result.swap_remove(0).src;
 
         debug!("记录缓存...");
-        DB.insert_image(&url, &ret)?;
+        DB.insert_image(&page_url, &ret)?;
 
         Ok(ret)
     }

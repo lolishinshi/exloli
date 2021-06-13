@@ -88,6 +88,14 @@ pub fn get_id_from_image(url: &str) -> Option<i32> {
     caps.get(1).and_then(|s| s.as_str().parse::<i32>().ok())
 }
 
+/// 提取图片哈希，此处为原图哈希的前十位
+/// 链接示例：https://exhentai.org/s/03af734602/1932743-1
+pub fn get_hash_from_image(url: &str) -> Option<&str> {
+    static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"/s/([0-9a-f]+)/").unwrap());
+    let caps = RE.captures(url)?;
+    caps.get(1).map(|s| s.as_str())
+}
+
 /// 根据消息 id 生成当前频道的消息直链
 pub fn get_message_url(id: i32) -> String {
     format!("https://t.me/{}/{}", CONFIG.telegram.channel_id, id)

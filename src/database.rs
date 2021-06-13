@@ -34,6 +34,13 @@ pub struct Image {
     pub url: String,
 }
 
+#[derive(Queryable, Insertable)]
+#[table_name = "image_hash"]
+pub struct ImageHash {
+    pub hash: String,
+    pub url: String,
+}
+
 pub struct DataBase {
     pool: Pool<ConnectionManager<SqliteConnection>>,
 }
@@ -52,22 +59,31 @@ impl DataBase {
     }
 
     pub fn insert_image(&self, image_url: &str, uploaded_url: &str) -> Result<()> {
-        let fileindex = get_id_from_image(image_url).context("fileindex 提取失败")?;
-        let img = Image {
+        let hash = get_hash_from_image(image_url).context("图片哈希提取失败")?;
+        let img = ImageHash {
+            hash: hash.to_owned(),
             url: uploaded_url.to_owned(),
-            fileindex,
         };
-        diesel::insert_or_ignore_into(images::table)
+        diesel::insert_or_ignore_into(image_hash::table)
             .values(&img)
             .execute(&self.pool.get()?)?;
         Ok(())
     }
 
-    pub fn query_image_by_url(&self, image_url: &str) -> Result<Image> {
-        let fileindex = get_id_from_image(image_url).context("fileindex 提取失败")?;
+    pub fn query_image_by_hash(&self, image_url: &str) -> Result<String> {
+        let hash = get_hash_from_image(image_url).context("无法提取图片 hash")?;
+        Ok(image_hash::table
+            .filter(image_hash::hash.eq(hash))
+            .get_result::<ImageHash>(&self.pool.get()?)?
+            .url)
+    }
+
+    pub fn query_image_by_fileindex(&self, image_url: &str) -> Result<String> {
+        let fileindex = get_id_from_image(image_url).context("无法提取图片 fileindex")?;
         Ok(images::table
             .filter(images::fileindex.eq(fileindex))
-            .get_result::<Image>(&self.pool.get()?)?)
+            .get_result::<Image>(&self.pool.get()?)?
+            .url)
     }
 
     pub fn insert_gallery(
