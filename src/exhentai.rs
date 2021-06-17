@@ -232,7 +232,6 @@ impl<'a> FullGalleryInfo<'a> {
     /// 上传指定的图片并返回上传后的地址
     pub async fn upload_image(&self, page_url: &str, client: &Client) -> Result<String> {
         debug!("获取图片真实地址中：{}", page_url);
-        let response = send!(self.client.get(page_url))?;
 
         // 第一次查询，查询 image_hash
         if let Ok(url) = DB.query_image_by_hash(&page_url) {
@@ -240,6 +239,7 @@ impl<'a> FullGalleryInfo<'a> {
             return Ok(url);
         }
 
+        let response = send!(self.client.get(page_url))?;
         let url = parse_html(response.text().await?)?
             .xpath_text(r#"//img[@id="img"]/@src"#)?
             .swap_remove(0);
