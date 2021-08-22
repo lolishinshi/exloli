@@ -2,21 +2,72 @@
 
 从 E 站里站下载指定关键词的画(ben)廊(zi)并上传到 Telegraph 并发布到 Telegram 频道
 
-## 手动安装
+## 安装
 
-```
-cargo install --git https://github.com/Aloxaf/exloli
-```
+### 安装前的准备
 
-注: 由于依赖 libxml, Windows 上的安装可能比较麻烦...
+编译环境：Rust
+
+依赖：libxml2、gcc、sqlite3
+
+### 在Linux Server下安装
+
+在终端上执行：
+
+``` 
+[user@host ~]$ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+[user@host ~]$ source $HOME/.cargo/env
+
+[user@host ~]$ cargo install --git https://github.com/lolishinshi/exloli
+
+[user@host ~]$ cd && mkdir -p Document/exloli
+
+[user@host ~]$ [包管理系统|yum|apt|pacman|...] screen -y
+
+[user@host ~]$ screen -S exloli
+
+[user@host ~]$ cd Document/exloli
+```
 
 ## 用法
 
+### 使用 exloli bot 前的准备
+
 1. 创建 Telegram Channel, 并设为公开.
    私有 Channel 需要手动获取 chat id, 方法: 邀请 `@get_id_bot` 到 Channel 中, 然后发送 `/my_id@get_id_bot`
-2. 创建 Telegram Bot, 记录 TOKEN, 并拉进 Channel
+2. 在@BotFather创建 Telegram Bot, 记录 TOKEN, 并拉进 Channel
 3. 创建 Telegraph 账号, 记录 TOKEN. 创建方法: 访问 `https://api.telegra.ph/createAccount?short_name={}&author_name={}&author_url={}`
-4. 在当前目录下建立 config.toml, 并将 db.text.json 复制一份，然后运行 exloli
+4. 在`*/exloli`目录下建立 config.toml, 并将 仓库中的 db.text.json 复制一份，然后运行 exloli
+
+### exloli 服务
+
+```
+exloli #启动exloli服务
+exloli --debug #启动exloli，模式为调试
+```
+
+#### Bot指令(commit 2c01fcd)
+
+```
+/ping - 测试存活
+/upload - 上传画廊
+/full - 上传画廊的完整版本
+/delete - 删除画廊
+/real_delete - 彻底删除画廊(调试用命令)
+/query - 查询画廊
+/best - 获取第 $1 ~ $2 天间的画廊排行
+/uptag - 更新画廊tag
+```
+
+#### 使用 exloli bot 的权限判断
+
+需满足以下条件：
+
+1. 是否为频道管理员
+2. 是否为频道关联讨论组的管理员
+
+## 模板
 
 config.toml 模板如下
 
