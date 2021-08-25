@@ -83,19 +83,23 @@ async fn run() -> Result<(), Error> {
 
     let debug_mode = matches.opt_present("debug");
 
-    tokio::spawn(async move { crate::bot::start_bot().await });
-
-    loop {
-        if !debug_mode {
-            info!("定时更新开始");
-            let result = EXLOLI.scan_and_upload().await;
-            if let Err(e) = result {
-                error!("定时更新出错：{}", e);
-            } else {
-                info!("定时更新完成");
+    tokio::spawn(async move {
+        loop {
+            if !debug_mode {
+                info!("定时更新开始");
+                let result = EXLOLI.scan_and_upload().await;
+                if let Err(e) = result {
+                    error!("定时更新出错：{}", e);
+                } else {
+                    info!("定时更新完成");
+                }
             }
+            info!("休眠中，预计 {} 分钟后开始工作", CONFIG.interval / 60);
+            sleep(time::Duration::from_secs(CONFIG.interval)).await;
         }
-        info!("休眠中，预计 {} 分钟后开始工作", CONFIG.interval / 60);
-        sleep(time::Duration::from_secs(CONFIG.interval)).await;
-    }
+    });
+
+    crate::bot::start_bot().await;
+
+    Ok(())
 }
