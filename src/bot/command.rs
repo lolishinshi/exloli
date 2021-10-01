@@ -93,37 +93,37 @@ impl RuaCommand {
 
         debug!("收到命令：/{} {}", cmd, args);
 
-        let is_admin = check_is_channel_admin(message);
+        let (is_admin, trusted) = check_is_channel_admin(message);
 
-        match (cmd, is_admin) {
-            ("ping", _) => Ok(Self::Ping),
-            ("full", true) => {
+        match (cmd, is_admin, trusted) {
+            ("ping", _, _) => Ok(Self::Ping),
+            ("full", _, true) => {
                 let arg = get_input_gallery(&message.update, args);
                 match arg.is_empty() {
                     false => Ok(Self::Full(arg)),
                     true => Err(WrongCommand("用法：/full [回复|画廊地址|消息地址]...")),
                 }
             }
-            ("uptag", true) => {
+            ("uptag", _, true) => {
                 let arg = get_input_gallery(&message.update, args);
                 match arg.is_empty() {
                     false => Ok(Self::UpdateTag(arg)),
                     true => Err(WrongCommand("用法：/uptag [回复|画廊地址|消息地址]...")),
                 }
             }
-            ("delete", true) => {
+            ("delete", true, _) => {
                 if message.update.reply_to_gallery().is_none() {
                     return Err(WrongCommand("用法：请回复一个需要删除的画廊"));
                 }
                 Ok(Self::Delete)
             }
-            ("real_delete", true) => {
+            ("real_delete", true, _) => {
                 if message.update.reply_to_gallery().is_none() {
                     return Err(WrongCommand("用法：请回复一个需要彻底删除的画廊"));
                 }
                 Ok(Self::RealDelete)
             }
-            ("upload", true) => {
+            ("upload", _, true) => {
                 let urls = get_exhentai_urls(message.update.text().unwrap_or_default());
                 if urls.is_empty() {
                     Err(WrongCommand("用法：/upload 画廊地址..."))
@@ -131,7 +131,7 @@ impl RuaCommand {
                     Ok(Self::Upload(urls))
                 }
             }
-            ("best", _) => match parse_command_best(args) {
+            ("best", _, _) => match parse_command_best(args) {
                 Some(mut v) => {
                     v[0] = v[0].min(3650);
                     v[1] = v[1].min(3650);
@@ -139,7 +139,7 @@ impl RuaCommand {
                 }
                 _ => Err(WrongCommand("用法：/best 起始时间 终止时间")),
             },
-            ("query", _) => {
+            ("query", _, _) => {
                 let arg = get_input_gallery(&message.update, args);
                 match arg.is_empty() {
                     false => Ok(Self::Query(arg)),

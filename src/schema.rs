@@ -37,9 +37,4 @@ table! {
     }
 }
 
-allow_tables_to_appear_in_same_query!(
-    gallery,
-    image_hash,
-    images,
-    user_vote,
-);
+allow_tables_to_appear_in_same_query!(gallery, image_hash, images, user_vote,);

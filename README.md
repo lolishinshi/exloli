@@ -123,4 +123,6 @@ token = "TOKEN"
 bot_id = "@crypko_bot"
 # telegram 频道对应讨论组的 ID，暂时只能为数字
 group_id = -2147483647
+# 受信用户，拥有除了删本以外的权限
+trusted_users = ["test"]
 ```

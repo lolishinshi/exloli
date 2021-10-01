@@ -233,7 +233,6 @@ impl ExLoli {
         let text = Self::get_message_string(gallery, article);
         BOT.edit_message_text(CONFIG.telegram.channel_id.clone(), message_id, &text)
             .parse_mode(ParseMode::Html)
-            .send()
             .await?;
         DB.update_gallery(message_id, &gallery, article, upload_images)
     }
@@ -265,7 +264,6 @@ impl ExLoli {
         Ok(BOT
             .send_message(CONFIG.telegram.channel_id.clone(), &text)
             .parse_mode(ParseMode::Html)
-            .send()
             .await?)
     }
 

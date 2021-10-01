@@ -44,6 +44,7 @@ pub struct Telegram {
     pub bot_id: String,
     pub token: String,
     pub group_id: ChatId,
+    pub trusted_users: Vec<String>,
 }
 
 impl Config {

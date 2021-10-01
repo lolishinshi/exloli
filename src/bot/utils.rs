@@ -81,7 +81,7 @@ async fn get_admins() -> Option<Vec<User>> {
 }
 
 // 检测是否是指定频道的管理员
-pub fn check_is_channel_admin(message: &Update<Message>) -> bool {
+pub fn check_is_channel_admin(message: &Update<Message>) -> (bool, bool) {
     // 先检测是否为匿名管理员
     let from_user = message.update.from();
     if from_user
@@ -89,14 +89,20 @@ pub fn check_is_channel_admin(message: &Update<Message>) -> bool {
         .unwrap_or(false)
         && message.update.is_from_my_group()
     {
-        return true;
+        return (true, true);
     }
     let admins = block_in_place(|| futures::executor::block_on(get_admins())).unwrap_or_default();
-    message
+    let is_admin = message
         .update
         .from()
         .map(|user| admins.iter().map(|admin| admin == user).any(|x| x))
-        .unwrap_or(false)
+        .unwrap_or(false);
+    let trusted = is_admin
+        || CONFIG
+            .telegram
+            .trusted_users
+            .contains(message.update.from_username().unwrap());
+    (is_admin, trusted)
 }
 
 pub fn inline_article<S1, S2>(title: S1, content: S2) -> InlineQueryResultArticle

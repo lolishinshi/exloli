@@ -351,7 +351,7 @@ impl ExHentai {
             client = client.proxy(Proxy::all(proxy)?)
         }
         let client = client.build()?;
-
+        info!("Cookie 登陆中……");
         let _response = send!(client.get(format!("https://{}/uconfig.php", *HOST)))?;
         let _response = send!(client.get(format!("https://{}/mytags", *HOST)))?;
         info!("登录成功!");
