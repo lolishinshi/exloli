@@ -101,7 +101,7 @@ pub fn check_is_channel_admin(message: &Update<Message>) -> (bool, bool) {
         || CONFIG
             .telegram
             .trusted_users
-            .contains(message.update.from_username().unwrap());
+            .contains(message.update.from_username().unwrap_or(&String::new()));
     (is_admin, trusted)
 }
 
