@@ -39,7 +39,13 @@ impl Database {
                 return data.trans(name);
             }
         }
-        unreachable!("unknown namespace!")
+        for data in &self.data {
+            let trans = data.trans(name);
+            if trans != name {
+                return trans;
+            }
+        }
+        return name;
     }
 }
 
