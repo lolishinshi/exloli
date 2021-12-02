@@ -83,7 +83,10 @@ async fn run() -> Result<(), Error> {
 
     let debug_mode = matches.opt_present("debug");
 
-    tokio::spawn(async move { crate::bot::start_bot().await });
+    tokio::spawn(async move {
+        sleep(time::Duration::from_secs(10)).await;
+        crate::bot::start_bot().await
+    });
 
     loop {
         if !debug_mode {
