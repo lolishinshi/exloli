@@ -78,8 +78,19 @@ impl ExLoli {
 
     /// 上传指定 URL 的画廊
     pub async fn upload_gallery_by_url(&self, url: &str) -> Result<()> {
-        let mut gallery = EXHENTAI.get_gallery_by_url(url).await?;
-        gallery.limit = false;
+        let gallery = match url.split_once('#') {
+            Some((url, cover_index)) => {
+                let mut gallery = EXHENTAI.get_gallery_by_url(url).await?;
+                gallery.limit = false;
+                gallery.cover_index = cover_index.parse()?;
+                gallery
+            }
+            _ => {
+                let mut gallery = EXHENTAI.get_gallery_by_url(url).await?;
+                gallery.limit = false;
+                gallery
+            }
+        };
         self.upload_gallery(gallery).await
     }
 
@@ -121,7 +132,8 @@ impl ExLoli {
             Err(e) => warn!("没有找到历史上传：{}", e),
         }
 
-        let img_urls = gallery.upload_images_to_telegraph().await?;
+        let mut img_urls = gallery.upload_images_to_telegraph().await?;
+        img_urls.swap(0, basic_info.cover_index);
 
         // 上传到 telegraph
         let title = gallery.title();

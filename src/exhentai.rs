@@ -57,6 +57,8 @@ pub struct BasicGalleryInfo<'a> {
     pub url: String,
     /// 是否限制图片数量
     pub limit: bool,
+    /// 封面图片序号
+    pub cover_index: usize,
 }
 
 impl<'a> BasicGalleryInfo<'a> {
@@ -392,6 +394,7 @@ impl ExHentai {
                 title,
                 url,
                 limit: true,
+                cover_index: 0,
             })
         }
 
@@ -425,6 +428,7 @@ impl ExHentai {
             title,
             url,
             limit: true,
+            cover_index: 0,
         })
     }
 }

@@ -15,7 +15,7 @@ use tokio::task::block_in_place;
 use uuid::Uuid;
 
 pub static EXHENTAI_URL: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"https://e.hentai\.org/g/\d+/[0-9a-f]+/?").unwrap());
+    Lazy::new(|| Regex::new(r"https://e.hentai\.org/g/\d+/[0-9a-f]+/?(#\d+)?").unwrap());
 pub static MESSAGE_URL: Lazy<Regex> = Lazy::new(|| {
     let channel_id = &CONFIG.telegram.channel_id;
     Regex::new(
