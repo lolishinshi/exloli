@@ -1,0 +1,10 @@
+version: "3.3"
+services:
+  skrman:
+    image: aloxaf/exloli:0.1.0
+    container_name: exloli
+    volumes:
+      - ./db.sqlite:/app/db.sqlite
+      - ./db.text.json:/app/db.text.json
+      - ./config.toml:/app/config.toml
+    restart: unless-stopped

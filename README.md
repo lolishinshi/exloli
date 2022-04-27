@@ -4,13 +4,19 @@
 
 ## 安装
 
-### 安装前的准备
+### Docker
+
+参见 docker-compose.yml
+
+### 手动编译
+
+#### 编译前的准备
 
 编译环境：Rust
 
 依赖：libxml2、gcc、sqlite3
 
-### 在Linux Server下安装
+#### 在 Linux Server 下编译安装
 
 在终端上执行：
 
