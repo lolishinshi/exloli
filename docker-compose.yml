@@ -1,7 +1,7 @@
 version: "3.3"
 services:
   skrman:
-    image: aloxaf/exloli:0.1.0
+    image: aloxaf/exloli:0.5.3
     container_name: exloli
     volumes:
       - ./db.sqlite:/app/db.sqlite
