@@ -1,4 +1,4 @@
-use super::utils::{ *};
+use super::utils::*;
 use crate::bot::command::*;
 use crate::database::Gallery;
 use crate::utils::get_message_url;
@@ -14,7 +14,7 @@ use teloxide::{ApiError, RequestError};
 macro_rules! reply_to {
     ($b:expr, $m:expr, $t:expr) => {
         $b.send_message($m.chat.id, $t).reply_to_message_id($m.id)
-    }
+    };
 }
 
 static LIMIT: Lazy<RateLimiter<u64>> =
@@ -105,7 +105,11 @@ async fn cmd_upload(bot: AutoSend<Bot>, message: &Message, urls: &[String]) -> R
     .await
 }
 
-async fn cmd_full(bot: AutoSend<Bot>, message: &Message, galleries: &[InputGallery]) -> Result<Message> {
+async fn cmd_full(
+    bot: AutoSend<Bot>,
+    message: &Message,
+    galleries: &[InputGallery],
+) -> Result<Message> {
     info!("执行命令: full {:?}", galleries);
     do_chain_action(bot, message, galleries, |gallery| {
         let gallery = match block_on(gallery.to_gallery()) {
@@ -117,7 +121,11 @@ async fn cmd_full(bot: AutoSend<Bot>, message: &Message, galleries: &[InputGalle
     .await
 }
 
-async fn cmd_update_tag(bot: AutoSend<Bot>, message: &Message, galleries: &[InputGallery]) -> Result<Message> {
+async fn cmd_update_tag(
+    bot: AutoSend<Bot>,
+    message: &Message,
+    galleries: &[InputGallery],
+) -> Result<Message> {
     info!("执行命令: uptag {:?}", galleries);
     do_chain_action(bot, message, galleries, |gallery| {
         // TODO: 为啥要 block
@@ -164,26 +172,14 @@ async fn cmd_best(bot: AutoSend<Bot>, message: &Message, from: i64, to: i64) -> 
 }
 
 /// 查询画廊，若失败则返回失败消息，成功则直接发送
-async fn cmd_query(
-    bot: AutoSend<Bot>,
-    message: &Message,
-    galleries: &[InputGallery],
-) -> Result<Message> {
-    info!("执行命令: query {:?}", galleries);
-    let text = match galleries.len() {
-        1 => galleries[0]
-            .to_gallery()
-            .await
-            .and_then(|g| cmd_query_rank(&g))
-            .unwrap_or_else(|_| "未找到！".to_owned()),
-        _ => futures::future::join_all(galleries.iter().map(|g| {
-            g.to_gallery()
-                .and_then(|g| async move { Ok(get_message_url(g.message_id)) })
-                .unwrap_or_else(|_| "未找到！".to_owned())
-        }))
-        .await
-        .join("\n"),
-    };
+async fn cmd_query(bot: AutoSend<Bot>, message: &Message, gl_url: &str) -> Result<Message> {
+    info!("执行命令: query {:?}", gl_url);
+
+    let text = DB
+        .query_gallery_by_url(gl_url)
+        .and_then(|gl| cmd_query_rank(&gl))
+        .unwrap_or_else(|_| "未找到！".to_owned());
+
     Ok(reply_to!(bot, message, text)
         .disable_web_page_preview(true)
         .await?)
@@ -219,6 +215,32 @@ fn is_new_gallery(message: &Message) -> bool {
         .unwrap_or(false)
 }
 
+pub async fn public_command_handler(
+    bot: AutoSend<Bot>,
+    cmd: PublicCommand,
+    message: Message,
+) -> Result<()> {
+    match cmd {
+        PublicCommand::Ping => {
+            reply_to!(bot, message, "pong").await?;
+        }
+        PublicCommand::Query(url) => {
+            cmd_query(bot.clone(), &message, &url).await?;
+        }
+        PublicCommand::Full(url) => {
+
+        }
+        PublicCommand::Best(from, to) => {
+            cmd_best(bot.clone(), &message, from, to).await?;
+        }
+        PublicCommand::UpdateTag(url) => {
+
+        }
+    }
+
+    Ok(())
+}
+
 pub async fn message_handler(message: Message, bot: AutoSend<Bot>) -> Result<()> {
     use RuaCommand::*;
 
@@ -226,7 +248,10 @@ pub async fn message_handler(message: Message, bot: AutoSend<Bot>) -> Result<()>
 
     // 如果是新本子上传的消息，则回复投票并取消置顶
     if is_new_gallery(&message) && message.is_from_my_group() {
-        on_new_gallery(bot.clone(), &message).await.log_on_error().await;
+        on_new_gallery(bot.clone(), &message)
+            .await
+            .log_on_error()
+            .await;
     }
 
     // 其他命令
@@ -332,7 +357,12 @@ fn split_vec<T: FromStr>(s: &str) -> std::result::Result<Vec<T>, T::Err> {
         .collect::<std::result::Result<Vec<_>, _>>()
 }
 
-async fn callback_change_page(bot: AutoSend<Bot>, message: &Message, cmd: &str, data: &str) -> Result<()> {
+async fn callback_change_page(
+    bot: AutoSend<Bot>,
+    message: &Message,
+    cmd: &str,
+    data: &str,
+) -> Result<()> {
     info!("翻页：{} {}", message.id, cmd);
     // vec![from, to, offset]
     let data = split_vec::<i64>(data)?;
@@ -356,7 +386,12 @@ async fn callback_change_page(bot: AutoSend<Bot>, message: &Message, cmd: &str, 
     Ok(())
 }
 
-async fn callback_poll(bot: AutoSend<Bot>, message: &Message, user_id: u64, data: &str) -> Result<()> {
+async fn callback_poll(
+    bot: AutoSend<Bot>,
+    message: &Message,
+    user_id: u64,
+    data: &str,
+) -> Result<()> {
     let data = split_vec::<i32>(data)?;
     let [poll_id, option] = match TryInto::<[i32; 2]>::try_into(data) {
         Ok(v) => v,
