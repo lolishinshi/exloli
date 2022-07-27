@@ -210,10 +210,10 @@ impl DataBase {
             .get_result::<String>(&self.pool.get()?)?)
     }
 
-    pub fn insert_vote(&self, user_id: i64, poll_id: i32, option: i32) -> Result<()> {
+    pub fn insert_vote(&self, user_id: u64, poll_id: i32, option: i32) -> Result<()> {
         diesel::replace_into(user_vote::table)
             .values(&vec![(
-                user_vote::user_id.eq(user_id),
+                user_vote::user_id.eq(user_id as i64),
                 user_vote::poll_id.eq(poll_id),
                 user_vote::option.eq(option),
                 user_vote::vote_time.eq(Utc::now().naive_utc()),

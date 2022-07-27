@@ -5,32 +5,22 @@ mod utils;
 use crate::BOT;
 use handler::*;
 use teloxide::prelude::*;
-use tokio_stream::wrappers::UnboundedReceiverStream;
 
-pub async fn start_bot() {
+pub async fn start_bot(bot: AutoSend<Bot>) {
     info!("BOT 启动");
-    type DispatcherHandler<T> = DispatcherHandlerRx<AutoSend<Bot>, T>;
-    Dispatcher::new(BOT.clone())
-        .messages_handler(|rx: DispatcherHandler<Message>| {
-            UnboundedReceiverStream::new(rx).for_each_concurrent(8, |message| async {
-                message_handler(message).await.log_on_error().await;
-            })
-        })
-        .polls_handler(|rx: DispatcherHandler<Poll>| {
-            UnboundedReceiverStream::new(rx).for_each_concurrent(8, |message| async {
-                poll_handler(message).await.log_on_error().await;
-            })
-        })
-        .inline_queries_handler(|rx: DispatcherHandler<InlineQuery>| {
-            UnboundedReceiverStream::new(rx).for_each_concurrent(8, |message| async {
-                inline_handler(message).await.log_on_error().await;
-            })
-        })
-        .callback_queries_handler(|rx: DispatcherHandler<CallbackQuery>| {
-            UnboundedReceiverStream::new(rx).for_each_concurrent(8, |message| async {
-                callback_handler(message).await.log_on_error().await;
-            })
-        })
+
+    let handler = dptree::entry()
+        .branch(
+            Update::filter_message()
+                .branch(Message::filter_text().endpoint(message_handler))
+        )
+        .branch(Update::filter_poll().endpoint(poll_handler))
+        .branch(Update::filter_inline_query().endpoint(inline_handler))
+        .branch(Update::filter_callback_query().endpoint(callback_handler));
+
+    Dispatcher::builder(bot, handler)
+        .enable_ctrlc_handler()
+        .build()
         .dispatch()
         .await;
 }

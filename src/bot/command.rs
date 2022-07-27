@@ -71,10 +71,10 @@ pub enum RuaCommand {
 
 impl RuaCommand {
     /// 将消息解析为命令
-    pub fn parse(message: &Update<Message>, bot_id: &str) -> Result<Self, CommandError> {
+    pub async fn parse(bot: AutoSend<Bot>, message: &Message, bot_id: &str) -> Result<Self, CommandError> {
         use CommandError::*;
 
-        let text = message.update.text().unwrap_or("");
+        let text = message.text().unwrap_or("");
 
         if !text.starts_with('/') {
             return Err(NotACommand);
@@ -83,48 +83,48 @@ impl RuaCommand {
         let (cmd, args) = text
             .split_once(|c| c == ' ' || c == '\n')
             .unwrap_or((text, ""));
-        let (cmd, bot) = cmd.split_once('@').unwrap_or((cmd, ""));
+        let (cmd, bot_name) = cmd.split_once('@').unwrap_or((cmd, ""));
         // remove leading `/`
         let cmd = &cmd[1..];
 
-        if !bot.is_empty() && bot != bot_id {
+        if !bot_name.is_empty() && bot_name != bot_id {
             return Err(NotACommand);
         }
 
         debug!("收到命令：/{} {}", cmd, args);
 
-        let (is_admin, trusted) = check_is_channel_admin(message);
+        let (is_admin, trusted) = check_is_channel_admin(bot, message).await;
 
         match (cmd, is_admin, trusted) {
             ("ping", _, _) => Ok(Self::Ping),
             ("full", _, true) => {
-                let arg = get_input_gallery(&message.update, args);
+                let arg = get_input_gallery(&message, args);
                 match arg.is_empty() {
                     false => Ok(Self::Full(arg)),
                     true => Err(WrongCommand("用法：/full [回复|画廊地址|消息地址]...")),
                 }
             }
             ("uptag", _, true) => {
-                let arg = get_input_gallery(&message.update, args);
+                let arg = get_input_gallery(&message, args);
                 match arg.is_empty() {
                     false => Ok(Self::UpdateTag(arg)),
                     true => Err(WrongCommand("用法：/uptag [回复|画廊地址|消息地址]...")),
                 }
             }
             ("delete", true, _) => {
-                if message.update.reply_to_gallery().is_none() {
+                if message.reply_to_gallery().is_none() {
                     return Err(WrongCommand("用法：请回复一个需要删除的画廊"));
                 }
                 Ok(Self::Delete)
             }
             ("real_delete", true, _) => {
-                if message.update.reply_to_gallery().is_none() {
+                if message.reply_to_gallery().is_none() {
                     return Err(WrongCommand("用法：请回复一个需要彻底删除的画廊"));
                 }
                 Ok(Self::RealDelete)
             }
             ("upload", _, true) => {
-                let urls = get_exhentai_urls(message.update.text().unwrap_or_default());
+                let urls = get_exhentai_urls(message.text().unwrap_or_default());
                 if urls.is_empty() {
                     Err(WrongCommand("用法：/upload 画廊地址..."))
                 } else {
@@ -140,14 +140,14 @@ impl RuaCommand {
                 _ => Err(WrongCommand("用法：/best 起始时间 终止时间")),
             },
             ("query", _, _) => {
-                let arg = get_input_gallery(&message.update, args);
+                let arg = get_input_gallery(&message, args);
                 match arg.is_empty() {
                     false => Ok(Self::Query(arg)),
                     true => Err(WrongCommand("用法：/query [回复|画廊地址|消息地址]...")),
                 }
             }
             _ => {
-                if bot == bot_id {
+                if bot_name == bot_id {
                     Err(WrongCommand(""))
                 } else {
                     Err(NotACommand)

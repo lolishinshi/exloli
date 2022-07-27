@@ -1,6 +1,5 @@
 use crate::database::Gallery;
 use crate::{BOT, CONFIG, DB};
-use cached::proc_macro::cached;
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -26,8 +25,6 @@ pub static MESSAGE_URL: Lazy<Regex> = Lazy::new(|| {
     .unwrap()
 });
 
-pub type Update<T> = UpdateWithCx<AutoSend<Bot>, T>;
-
 pub trait MessageExt {
     fn is_from_my_group(&self) -> bool;
     fn from_username(&self) -> Option<&String>;
@@ -38,10 +35,7 @@ pub trait MessageExt {
 impl MessageExt for Message {
     // 判断消息来源是否是指定群组
     fn is_from_my_group(&self) -> bool {
-        match CONFIG.telegram.group_id {
-            ChatId::Id(id) => self.chat.id == id,
-            _ => todo!(),
-        }
+        CONFIG.telegram.group_id == self.chat.id
     }
 
     fn from_username(&self) -> Option<&String> {
@@ -61,19 +55,19 @@ impl MessageExt for Message {
     fn reply_to_gallery(&self) -> Option<Gallery> {
         self.reply_to_message()
             .and_then(|message| message.forward_from_message_id())
-            .and_then(|mess_id| DB.query_gallery(*mess_id).ok())
+            .and_then(|mess_id| DB.query_gallery(mess_id).ok())
     }
 }
 
-/// 获取管理员列表，提供 1 个小时的缓存
-#[cached(time = 3600, option)]
-async fn get_admins() -> Option<Vec<User>> {
-    let mut admins = BOT
+// TODO: 缓存
+/// 获取管理员列表
+async fn get_admins(bot: AutoSend<Bot>) -> Option<Vec<User>> {
+    let mut admins = bot
         .get_chat_administrators(CONFIG.telegram.channel_id.clone())
         .await
         .ok()?;
     admins.extend(
-        BOT.get_chat_administrators(CONFIG.telegram.group_id.clone())
+        bot.get_chat_administrators(CONFIG.telegram.group_id.clone())
             .await
             .ok()?,
     );
@@ -81,19 +75,18 @@ async fn get_admins() -> Option<Vec<User>> {
 }
 
 // 检测是否是指定频道的管理员
-pub fn check_is_channel_admin(message: &Update<Message>) -> (bool, bool) {
+pub async fn check_is_channel_admin(bot: AutoSend<Bot>, message: &Message) -> (bool, bool) {
     // 先检测是否为匿名管理员
-    let from_user = message.update.from();
+    let from_user = message.from();
     if from_user
         .map(|u| u.username == Some("GroupAnonymousBot".into()))
         .unwrap_or(false)
-        && message.update.is_from_my_group()
+        && message.is_from_my_group()
     {
         return (true, true);
     }
-    let admins = block_in_place(|| futures::executor::block_on(get_admins())).unwrap_or_default();
+    let admins = get_admins(bot).await.unwrap_or_default();
     let is_admin = message
-        .update
         .from()
         .map(|user| admins.iter().map(|admin| admin == user).any(|x| x))
         .unwrap_or(false);
@@ -101,7 +94,7 @@ pub fn check_is_channel_admin(message: &Update<Message>) -> (bool, bool) {
         || CONFIG
             .telegram
             .trusted_users
-            .contains(message.update.from_username().unwrap_or(&String::new()));
+            .contains(message.from_username().unwrap_or(&String::new()));
     (is_admin, trusted)
 }
 

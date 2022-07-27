@@ -86,7 +86,7 @@ async fn run() -> Result<(), Error> {
 
     tokio::spawn(async move {
         sleep(time::Duration::from_secs(10)).await;
-        crate::bot::start_bot().await
+        // crate::bot::start_bot().await
     });
 
     loop {
