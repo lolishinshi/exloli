@@ -26,7 +26,7 @@ impl InputGallery {
     pub async fn to_gallery(&self) -> anyhow::Result<Gallery> {
         match &self {
             Self::Gallery(g) => Ok(g.clone()),
-            Self::ExHentaiUrl(s) => match DB.query_gallery_by_url(&s) {
+            Self::ExHentaiUrl(s) => match DB.query_gallery_by_url(s) {
                 Err(_) => {
                     let gallery = EXHENTAI
                         .get_gallery_by_url(s)
@@ -71,7 +71,11 @@ pub enum RuaCommand {
 
 impl RuaCommand {
     /// 将消息解析为命令
-    pub async fn parse(bot: AutoSend<Bot>, message: &Message, bot_id: &str) -> Result<Self, CommandError> {
+    pub async fn parse(
+        bot: AutoSend<Bot>,
+        message: &Message,
+        bot_id: &str,
+    ) -> Result<Self, CommandError> {
         use CommandError::*;
 
         let text = message.text().unwrap_or("");
@@ -98,14 +102,14 @@ impl RuaCommand {
         match (cmd, is_admin, trusted) {
             ("ping", _, _) => Ok(Self::Ping),
             ("full", _, true) => {
-                let arg = get_input_gallery(&message, args);
+                let arg = get_input_gallery(message, args);
                 match arg.is_empty() {
                     false => Ok(Self::Full(arg)),
                     true => Err(WrongCommand("用法：/full [回复|画廊地址|消息地址]...")),
                 }
             }
             ("uptag", _, true) => {
-                let arg = get_input_gallery(&message, args);
+                let arg = get_input_gallery(message, args);
                 match arg.is_empty() {
                     false => Ok(Self::UpdateTag(arg)),
                     true => Err(WrongCommand("用法：/uptag [回复|画廊地址|消息地址]...")),
@@ -140,7 +144,7 @@ impl RuaCommand {
                 _ => Err(WrongCommand("用法：/best 起始时间 终止时间")),
             },
             ("query", _, _) => {
-                let arg = get_input_gallery(&message, args);
+                let arg = get_input_gallery(message, args);
                 match arg.is_empty() {
                     false => Ok(Self::Query(arg)),
                     true => Err(WrongCommand("用法：/query [回复|画廊地址|消息地址]...")),

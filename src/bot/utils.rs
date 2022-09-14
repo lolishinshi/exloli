@@ -1,5 +1,5 @@
 use crate::database::Gallery;
-use crate::{BOT, CONFIG, DB};
+use crate::{CONFIG, DB};
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -10,7 +10,6 @@ use std::ops::Deref;
 use std::time::{Duration, Instant};
 use teloxide::prelude::*;
 use teloxide::types::*;
-use tokio::task::block_in_place;
 use uuid::Uuid;
 
 pub static EXHENTAI_URL: Lazy<Regex> =
@@ -20,7 +19,7 @@ pub static MESSAGE_URL: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
         &format!(r"https://t.me/{}/(\d+)", channel_id)
             .replace("/-100", "/")
-            .replace("@", ""),
+            .replace('@', ""),
     )
     .unwrap()
 });
@@ -67,7 +66,7 @@ async fn get_admins(bot: AutoSend<Bot>) -> Option<Vec<User>> {
         .await
         .ok()?;
     admins.extend(
-        bot.get_chat_administrators(CONFIG.telegram.group_id.clone())
+        bot.get_chat_administrators(CONFIG.telegram.group_id)
             .await
             .ok()?,
     );

@@ -100,7 +100,7 @@ pub fn get_hash_from_image(url: &str) -> Option<&str> {
 pub fn get_message_url(id: i32) -> String {
     format!("https://t.me/{}/{}", CONFIG.telegram.channel_id, id)
         .replace("/-100", "/")
-        .replace("@", "")
+        .replace('@', "")
 }
 
 pub fn get_timestamp() -> u64 {

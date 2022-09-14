@@ -24,7 +24,7 @@ use std::time;
 mod bot;
 mod config;
 mod database;
-mod ehentai;
+//mod ehentai;
 mod exhentai;
 mod exloli;
 mod schema;
@@ -86,7 +86,7 @@ async fn run() -> Result<(), Error> {
 
     tokio::spawn(async move {
         sleep(time::Duration::from_secs(10)).await;
-        // crate::bot::start_bot().await
+        bot::start_bot(BOT.clone()).await
     });
 
     loop {

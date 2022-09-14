@@ -45,7 +45,7 @@ impl Database {
                 return trans;
             }
         }
-        return name;
+        name
     }
 }
 

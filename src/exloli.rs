@@ -124,7 +124,7 @@ impl ExLoli {
                 // 如果没有过期或者没有图片修改，则直接更新历史消息
                 if not_outdated || not_bigupdate {
                     info!("找到历史上传：{}", g.message_id);
-                    return self.update_gallery(&g, Some(gallery)).await;
+                    return self.update_gallery(g, Some(gallery)).await;
                 } else {
                     info!("历史上传已过期：{}", g.message_id);
                 }
@@ -182,7 +182,7 @@ impl ExLoli {
         let content = Self::get_article_string(
             &img_urls,
             gallery.img_pages.len(),
-            (ogallery.upload_images != 0).then(|| ogallery.upload_images as usize),
+            (ogallery.upload_images != 0).then_some(ogallery.upload_images as usize),
         );
         let page = self
             .edit_telegraph(extract_telegraph_path(&ogallery.telegraph), title, &content)
@@ -216,7 +216,7 @@ impl ExLoli {
 
         // 更新 telegraph
         let path = extract_telegraph_path(&old_gallery.telegraph);
-        let old_page = Telegraph::get_page(&path, true).await?;
+        let old_page = Telegraph::get_page(path, true).await?;
         let new_page = self
             .telegraph
             .edit_page(
@@ -229,7 +229,7 @@ impl ExLoli {
 
         let upload_images = old_gallery.upload_images as usize;
         let message_id = old_gallery.message_id;
-        self.update_message(message_id, &new_gallery, &new_page.url, upload_images)
+        self.update_message(message_id, new_gallery, &new_page.url, upload_images)
             .await
     }
 
@@ -246,13 +246,13 @@ impl ExLoli {
         BOT.edit_message_text(CONFIG.telegram.channel_id.clone(), message_id, &text)
             .parse_mode(ParseMode::Html)
             .await?;
-        DB.update_gallery(message_id, &gallery, article, upload_images)
+        DB.update_gallery(message_id, gallery, article, upload_images)
     }
 
     /// 将画廊内容上传至 telegraph
     async fn publish_to_telegraph<'a>(&self, title: &str, content: &str) -> Result<Page> {
         info!("上传到 Telegraph");
-        let text = html_to_node(&content);
+        let text = html_to_node(content);
         trace!("{}", text);
         Ok(self.telegraph.create_page(title, &text, false).await?)
     }
@@ -260,7 +260,7 @@ impl ExLoli {
     /// 修改已有的 telegraph 文章
     async fn edit_telegraph<'a>(&self, path: &str, title: &str, content: &str) -> Result<Page> {
         info!("更新 Telegraph: {}", path);
-        let text = html_to_node(&content);
+        let text = html_to_node(content);
         trace!("{}", text);
         Ok(self.telegraph.edit_page(path, title, &text, false).await?)
     }
@@ -297,7 +297,7 @@ impl ExLoli {
         total_image: usize,
         last_uploaded: Option<usize>,
     ) -> String {
-        let mut content = img_urls_to_html(&image_urls);
+        let mut content = img_urls_to_html(image_urls);
         if last_uploaded.is_some() || image_urls.len() != total_image {
             content.push_str("<p>");
             content.push_str(&format!("已上传 {}/{}", image_urls.len(), total_image,));

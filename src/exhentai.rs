@@ -205,7 +205,7 @@ impl<'a> FullGalleryInfo<'a> {
             update_progress();
             let mut err = None;
             for _ in 0..5i32 {
-                match self.upload_image(&url, &client_ref).await {
+                match self.upload_image(&url, client_ref).await {
                     Ok(v) => return Ok(v),
                     Err(e) => {
                         error!("获取图片地址失败：{}", e);
@@ -236,7 +236,7 @@ impl<'a> FullGalleryInfo<'a> {
         debug!("获取图片真实地址中：{}", page_url);
 
         // 第一次查询，查询 image_hash
-        if let Ok(url) = DB.query_image_by_hash(&page_url) {
+        if let Ok(url) = DB.query_image_by_hash(page_url) {
             trace!("找到缓存!");
             return Ok(url);
         }
@@ -249,7 +249,7 @@ impl<'a> FullGalleryInfo<'a> {
         // 第二次查询，查询 images，此为历史遗留问题
         // 一段时间后应该可以移除 images 表
         if let Ok(url) = DB.query_image_by_fileindex(&url) {
-            DB.insert_image(&page_url, &url)?;
+            DB.insert_image(page_url, &url)?;
             trace!("找到缓存!");
             return Ok(url);
         }
@@ -262,19 +262,19 @@ impl<'a> FullGalleryInfo<'a> {
         if file.metadata()?.len() > 5 * 1024 * 1024 {
             return Ok("".to_owned());
         }
-        let (width, height) = image::io::Reader::open(&file)?.into_dimensions()?;
+        let (width, height) = image::io::Reader::open(file)?.into_dimensions()?;
         if height * 10 <= width || width * 20 <= height {
             return Ok("".to_owned());
         }
 
         debug!("上传图片中...");
-        let mut result = Telegraph::upload_with(&[file], &client)
+        let mut result = Telegraph::upload_with(&[file], client)
             .await
             .context("上传 Telegraph  失败")?;
         let ret = result.swap_remove(0).src;
 
         debug!("记录缓存...");
-        DB.insert_image(&page_url, &ret)?;
+        DB.insert_image(page_url, &ret)?;
 
         Ok(ret)
     }
@@ -362,7 +362,7 @@ impl ExHentai {
     }
 
     /// 搜索指定关键字
-    pub async fn search<'a>(&'a self, page: i32) -> Result<Vec<BasicGalleryInfo<'a>>> {
+    pub async fn search(&self, page: i32) -> Result<Vec<BasicGalleryInfo>> {
         debug!("搜索第 {} 页", page);
         let response = send!(self
             .client
@@ -401,7 +401,7 @@ impl ExHentai {
         Ok(ret)
     }
 
-    pub async fn search_n_pages<'a>(&'a self, n: i32) -> Result<Vec<BasicGalleryInfo<'a>>> {
+    pub async fn search_n_pages(&self, n: i32) -> Result<Vec<BasicGalleryInfo>> {
         info!("搜索前 {} 页本子", n);
         let mut result = vec![];
         for page in 0..n {
@@ -414,10 +414,7 @@ impl ExHentai {
         Ok(result)
     }
 
-    pub async fn get_gallery_by_url<'a, S: Into<String>>(
-        &'a self,
-        url: S,
-    ) -> Result<BasicGalleryInfo<'a>> {
+    pub async fn get_gallery_by_url<S: Into<String>>(&self, url: S) -> Result<BasicGalleryInfo> {
         let url = url.into();
         info!("获取本子信息: {}", url);
         let response = send!(self.client.get(&url))?;

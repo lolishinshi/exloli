@@ -1,4 +1,4 @@
-use super::utils::{ *};
+use super::utils::*;
 use crate::bot::command::*;
 use crate::database::Gallery;
 use crate::utils::get_message_url;
@@ -14,7 +14,7 @@ use teloxide::{ApiError, RequestError};
 macro_rules! reply_to {
     ($b:expr, $m:expr, $t:expr) => {
         $b.send_message($m.chat.id, $t).reply_to_message_id($m.id)
-    }
+    };
 }
 
 static LIMIT: Lazy<RateLimiter<u64>> =
@@ -29,7 +29,7 @@ async fn on_new_gallery(bot: AutoSend<Bot>, message: &Message) -> Result<()> {
     let message_id = message.forward_from_message_id().unwrap();
     let poll_id = DB.query_poll_id(message_id)?.parse::<i32>()?;
     let votes = Vote::new(DB.query_vote(poll_id)?);
-    let options = poll_keyboard(poll_id, &*votes);
+    let options = poll_keyboard(poll_id, &votes);
     reply_to!(bot, message, votes.info())
         .reply_markup(options)
         .await?;
@@ -68,7 +68,7 @@ where
     let mut reply_message = reply_to!(bot, message, &text).await?;
     let mut fail_cnt = 0;
     for (idx, entry) in input.iter().enumerate() {
-        let message = match action(&entry).await {
+        let message = match action(entry).await {
             Ok(Some(_)) => format!("\n第 {} 本 - 成功", idx + 1),
             Ok(None) => format!("\n第 {} 本 - 无上传记录", idx + 1),
             Err(e) => {
@@ -105,7 +105,11 @@ async fn cmd_upload(bot: AutoSend<Bot>, message: &Message, urls: &[String]) -> R
     .await
 }
 
-async fn cmd_full(bot: AutoSend<Bot>, message: &Message, galleries: &[InputGallery]) -> Result<Message> {
+async fn cmd_full(
+    bot: AutoSend<Bot>,
+    message: &Message,
+    galleries: &[InputGallery],
+) -> Result<Message> {
     info!("执行命令: full {:?}", galleries);
     do_chain_action(bot, message, galleries, |gallery| {
         let gallery = match block_on(gallery.to_gallery()) {
@@ -117,7 +121,11 @@ async fn cmd_full(bot: AutoSend<Bot>, message: &Message, galleries: &[InputGalle
     .await
 }
 
-async fn cmd_update_tag(bot: AutoSend<Bot>, message: &Message, galleries: &[InputGallery]) -> Result<Message> {
+async fn cmd_update_tag(
+    bot: AutoSend<Bot>,
+    message: &Message,
+    galleries: &[InputGallery],
+) -> Result<Message> {
     info!("执行命令: uptag {:?}", galleries);
     do_chain_action(bot, message, galleries, |gallery| {
         // TODO: 为啥要 block
@@ -226,7 +234,10 @@ pub async fn message_handler(message: Message, bot: AutoSend<Bot>) -> Result<()>
 
     // 如果是新本子上传的消息，则回复投票并取消置顶
     if is_new_gallery(&message) && message.is_from_my_group() {
-        on_new_gallery(bot.clone(), &message).await.log_on_error().await;
+        on_new_gallery(bot.clone(), &message)
+            .await
+            .log_on_error()
+            .await;
     }
 
     // 其他命令
@@ -297,7 +308,7 @@ pub async fn message_handler(message: Message, bot: AutoSend<Bot>) -> Result<()>
     Ok(())
 }
 
-pub async fn poll_handler(poll: Poll, bot: AutoSend<Bot>) -> Result<()> {
+pub async fn poll_handler(poll: Poll, _bot: AutoSend<Bot>) -> Result<()> {
     let options = poll.options;
     let votes = options.iter().map(|s| s.voter_count).collect::<Vec<_>>();
     let score = Vote::wilson_score(&votes);
@@ -332,7 +343,12 @@ fn split_vec<T: FromStr>(s: &str) -> std::result::Result<Vec<T>, T::Err> {
         .collect::<std::result::Result<Vec<_>, _>>()
 }
 
-async fn callback_change_page(bot: AutoSend<Bot>, message: &Message, cmd: &str, data: &str) -> Result<()> {
+async fn callback_change_page(
+    bot: AutoSend<Bot>,
+    message: &Message,
+    cmd: &str,
+    data: &str,
+) -> Result<()> {
     info!("翻页：{} {}", message.id, cmd);
     // vec![from, to, offset]
     let data = split_vec::<i64>(data)?;
@@ -356,7 +372,12 @@ async fn callback_change_page(bot: AutoSend<Bot>, message: &Message, cmd: &str, 
     Ok(())
 }
 
-async fn callback_poll(bot: AutoSend<Bot>, message: &Message, user_id: u64, data: &str) -> Result<()> {
+async fn callback_poll(
+    bot: AutoSend<Bot>,
+    message: &Message,
+    user_id: u64,
+    data: &str,
+) -> Result<()> {
     let data = split_vec::<i32>(data)?;
     let [poll_id, option] = match TryInto::<[i32; 2]>::try_into(data) {
         Ok(v) => v,
@@ -364,7 +385,7 @@ async fn callback_poll(bot: AutoSend<Bot>, message: &Message, user_id: u64, data
     };
     DB.insert_vote(user_id, poll_id, option)?;
     let votes = Vote::new(DB.query_vote(poll_id)?);
-    let reply = poll_keyboard(poll_id, &*votes);
+    let reply = poll_keyboard(poll_id, &votes);
     let score = votes.score();
     let ret = bot
         .edit_message_text(message.chat.id, message.id, votes.info())

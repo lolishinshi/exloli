@@ -3,7 +3,7 @@ use reqwest::{Client, Proxy};
 use serde::Deserialize;
 use std::time::Duration;
 use std::{fs::File, io::Read, path::Path};
-use teloxide::types::ChatId;
+use teloxide::types::{ChatId, Recipient};
 use url::Url;
 
 #[derive(Debug, Deserialize)]
@@ -40,7 +40,7 @@ pub struct Telegraph {
 
 #[derive(Debug, Deserialize)]
 pub struct Telegram {
-    pub channel_id: ChatId,
+    pub channel_id: Recipient,
     pub bot_id: String,
     pub token: String,
     pub group_id: ChatId,
