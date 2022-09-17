@@ -262,7 +262,7 @@ pub async fn message_handler(message: Message, bot: AutoSend<Bot>) -> Result<()>
             to_delete.push(cmd_full(bot.clone(), &message, g).await?.id);
         }
         Ok(Delete) => {
-            bot.delete_message(message.chat.id, message.id).await?;
+            to_delete.push(cmd_delete(bot.clone(), &message, false).await?.id);
         }
         Ok(RealDelete) => {
             to_delete.push(cmd_delete(bot.clone(), &message, true).await?.id);
