@@ -124,7 +124,7 @@ impl ExLoli {
                 // 如果没有过期或者没有图片修改，则直接更新历史消息
                 if not_outdated || not_bigupdate {
                     info!("找到历史上传：{}", g.message_id);
-                    return self.update_gallery(g, Some(gallery)).await;
+                    return self.update_gallery(g, Some(gallery), false).await;
                 } else {
                     info!("历史上传已过期：{}", g.message_id);
                 }
@@ -162,6 +162,7 @@ impl ExLoli {
         &self,
         ogallery: &Gallery,
         gallery: Option<FullGalleryInfo<'a>>,
+        republish: bool,
     ) -> Result<()> {
         info!("更新画廊：{}", ogallery.get_url());
         let gallery = match gallery {
@@ -184,9 +185,14 @@ impl ExLoli {
             gallery.img_pages.len(),
             (ogallery.upload_images != 0).then_some(ogallery.upload_images as usize),
         );
-        let page = self
-            .edit_telegraph(extract_telegraph_path(&ogallery.telegraph), title, &content)
-            .await?;
+
+        let page = if republish {
+            self.publish_to_telegraph(title, &content).await?
+        } else {
+            self.edit_telegraph(extract_telegraph_path(&ogallery.telegraph), title, &content)
+                .await?
+        };
+
         let url = format!("{}?_={}", page.url, get_timestamp());
         self.update_message(ogallery.message_id, &gallery, &url, img_urls.len())
             .await

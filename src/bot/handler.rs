@@ -105,6 +105,23 @@ async fn cmd_upload(bot: AutoSend<Bot>, message: &Message, urls: &[String]) -> R
     .await
 }
 
+async fn cmd_reupload(
+    bot: AutoSend<Bot>,
+    message: &Message,
+    old_gallery: &InputGallery,
+) -> Result<Message> {
+    info!("执行命令: reupload {:?}", old_gallery);
+    let mut text = "收到命令，执行中……".to_owned();
+    let reply_message = reply_to!(bot, message, &text).await?;
+    let gallery = old_gallery.to_gallery().await?;
+    EXLOLI.update_gallery(&gallery, None, true).await?;
+    text.push_str("\n执行完毕");
+    Ok(bot
+        .edit_message_text(reply_message.chat.id, reply_message.id, text)
+        .parse_mode(ParseMode::Html)
+        .await?)
+}
+
 async fn cmd_full(
     bot: AutoSend<Bot>,
     message: &Message,
@@ -116,7 +133,7 @@ async fn cmd_full(
             Ok(v) => v,
             _ => return async { Ok(None) }.boxed(),
         };
-        async move { EXLOLI.update_gallery(&gallery, None).await.map(Some) }.boxed()
+        async move { EXLOLI.update_gallery(&gallery, None, false).await.map(Some) }.boxed()
     })
     .await
 }
@@ -278,6 +295,9 @@ pub async fn message_handler(message: Message, bot: AutoSend<Bot>) -> Result<()>
         }
         Ok(Best([from, to])) => {
             to_delete.push(cmd_best(bot.clone(), &message, *from, *to).await?.id);
+        }
+        Ok(ReUpload(g)) => {
+            to_delete.push(cmd_reupload(bot.clone(), &message, g).await?.id);
         }
         // 收到无效命令则立即返回
         Err(CommandError::NotACommand) => return Ok(()),

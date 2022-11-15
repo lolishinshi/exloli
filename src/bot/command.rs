@@ -65,6 +65,8 @@ pub enum RuaCommand {
     Best([i64; 2]),
     // 用该命令回复一条画廊以上传其完整版本
     Full(Vec<InputGallery>),
+    // 用该命令回复一条画廊以重新上传
+    ReUpload(InputGallery),
     // 更新 tag
     UpdateTag(Vec<InputGallery>),
 }
@@ -113,6 +115,15 @@ impl RuaCommand {
                 match arg.is_empty() {
                     false => Ok(Self::UpdateTag(arg)),
                     true => Err(WrongCommand("用法：/uptag [回复|画廊地址|消息地址]...")),
+                }
+            }
+            ("reupload", true, _) => {
+                let reply_to = message.reply_to_gallery();
+                match reply_to {
+                    Some(g) => Ok(Self::ReUpload(InputGallery::Gallery(g))),
+                    None => Err(WrongCommand(
+                        "用法：请回复一个需要替换的画廊，并附上新画廊地址",
+                    )),
                 }
             }
             ("delete", true, _) => {
