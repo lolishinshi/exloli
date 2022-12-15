@@ -5,7 +5,7 @@ mod utils;
 use handler::*;
 use teloxide::prelude::*;
 
-pub async fn start_bot(bot: AutoSend<Bot>) {
+pub async fn start_bot(bot: Bot) {
     info!("BOT 启动");
 
     let handler = dptree::entry()

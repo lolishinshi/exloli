@@ -7,7 +7,7 @@ use chrono::{Datelike, Duration, Timelike, Utc};
 use futures::TryFutureExt;
 use telegraph_rs::{html_to_node, Page, Telegraph};
 use teloxide::prelude::*;
-use teloxide::types::ParseMode;
+use teloxide::types::{MessageId, ParseMode};
 use v_htmlescape::escape;
 
 pub struct ExLoli {
@@ -151,10 +151,10 @@ impl ExLoli {
         // 生成 poll_id，仅当旧画廊使用的新格式 poll_id 的情况下才会继承
         let poll_id = old_gallery
             .and_then(|g| g.poll_id.parse::<i32>().map_err(anyhow::Error::new))
-            .unwrap_or(message.id);
+            .unwrap_or(message.id.0);
 
-        DB.insert_gallery(message.id, &gallery, page.url)?;
-        DB.update_poll_id(message.id, &poll_id.to_string())
+        DB.insert_gallery(message.id.0, &gallery, page.url)?;
+        DB.update_poll_id(message.id.0, &poll_id.to_string())
     }
 
     /// 原地更新画廊，若 gallery 为 None 则原地更新为原画廊的完整版
@@ -249,9 +249,13 @@ impl ExLoli {
     ) -> Result<()> {
         info!("更新 Telegram 频道消息");
         let text = Self::get_message_string(gallery, article);
-        BOT.edit_message_text(CONFIG.telegram.channel_id.clone(), message_id, &text)
-            .parse_mode(ParseMode::Html)
-            .await?;
+        BOT.edit_message_text(
+            CONFIG.telegram.channel_id.clone(),
+            MessageId(message_id),
+            &text,
+        )
+        .parse_mode(ParseMode::Html)
+        .await?;
         DB.update_gallery(message_id, gallery, article, upload_images)
     }
 

@@ -20,7 +20,7 @@ macro_rules! reply_to {
 static LIMIT: Lazy<RateLimiter<u64>> =
     Lazy::new(|| RateLimiter::new(std::time::Duration::from_secs(60), 10));
 //
-async fn on_new_gallery(bot: AutoSend<Bot>, message: &Message) -> Result<()> {
+async fn on_new_gallery(bot: Bot, message: &Message) -> Result<()> {
     info!("频道消息更新，发送投票");
     // 辣鸡 tg 安卓客户端在置顶消息过多时似乎在进群时会卡住
     bot.unpin_chat_message(message.chat.id)
@@ -36,15 +36,15 @@ async fn on_new_gallery(bot: AutoSend<Bot>, message: &Message) -> Result<()> {
     Ok(())
 }
 //
-async fn cmd_delete(bot: AutoSend<Bot>, message: &Message, real: bool) -> Result<Message> {
-    info!("执行命令: delete_{} {}", real, message.id);
+async fn cmd_delete(bot: Bot, message: &Message, real: bool) -> Result<Message> {
+    info!("执行命令: delete_{} {:?}", real, message.id);
     let to_del = message.reply_to_message().context("找不到回复")?;
     let channel = to_del.forward_from_chat().context("获取来源对话失败")?;
     let msg_id = to_del
         .forward_from_message_id()
         .context("获取转发来源失败")?;
     bot.delete_message(to_del.chat.id, to_del.id).await?;
-    bot.delete_message(channel.id, msg_id).await?;
+    bot.delete_message(channel.id, MessageId(msg_id)).await?;
     let gallery = DB.query_gallery(msg_id)?;
     match real {
         false => DB.delete_gallery(msg_id)?,
@@ -55,7 +55,7 @@ async fn cmd_delete(bot: AutoSend<Bot>, message: &Message, real: bool) -> Result
 }
 
 async fn do_chain_action<T, F, Fut>(
-    bot: AutoSend<Bot>,
+    bot: Bot,
     message: &Message,
     input: &[T],
     action: F,
@@ -96,7 +96,7 @@ where
         .await?)
 }
 
-async fn cmd_upload(bot: AutoSend<Bot>, message: &Message, urls: &[String]) -> Result<Message> {
+async fn cmd_upload(bot: Bot, message: &Message, urls: &[String]) -> Result<Message> {
     info!("执行命令: upload {:?}", urls);
     do_chain_action(bot, message, urls, |url| {
         let url = url.clone();
@@ -105,11 +105,7 @@ async fn cmd_upload(bot: AutoSend<Bot>, message: &Message, urls: &[String]) -> R
     .await
 }
 
-async fn cmd_reupload(
-    bot: AutoSend<Bot>,
-    message: &Message,
-    old_gallery: &InputGallery,
-) -> Result<Message> {
+async fn cmd_reupload(bot: Bot, message: &Message, old_gallery: &InputGallery) -> Result<Message> {
     info!("执行命令: reupload {:?}", old_gallery);
     let mut text = "收到命令，执行中……".to_owned();
     let reply_message = reply_to!(bot, message, &text).await?;
@@ -122,11 +118,7 @@ async fn cmd_reupload(
         .await?)
 }
 
-async fn cmd_full(
-    bot: AutoSend<Bot>,
-    message: &Message,
-    galleries: &[InputGallery],
-) -> Result<Message> {
+async fn cmd_full(bot: Bot, message: &Message, galleries: &[InputGallery]) -> Result<Message> {
     info!("执行命令: full {:?}", galleries);
     do_chain_action(bot, message, galleries, |gallery| {
         let gallery = match block_on(gallery.to_gallery()) {
@@ -139,7 +131,7 @@ async fn cmd_full(
 }
 
 async fn cmd_update_tag(
-    bot: AutoSend<Bot>,
+    bot: Bot,
     message: &Message,
     galleries: &[InputGallery],
 ) -> Result<Message> {
@@ -178,7 +170,7 @@ fn query_best_text(from: i64, to: i64, offset: i64) -> Result<String> {
     Ok(text)
 }
 
-async fn cmd_best(bot: AutoSend<Bot>, message: &Message, from: i64, to: i64) -> Result<Message> {
+async fn cmd_best(bot: Bot, message: &Message, from: i64, to: i64) -> Result<Message> {
     info!("执行命令: best {} {}", from, to);
     let text = query_best_text(from, to, 1)?;
     let reply_markup = query_best_keyboard(from, to, 1);
@@ -189,11 +181,7 @@ async fn cmd_best(bot: AutoSend<Bot>, message: &Message, from: i64, to: i64) -> 
 }
 
 /// 查询画廊，若失败则返回失败消息，成功则直接发送
-async fn cmd_query(
-    bot: AutoSend<Bot>,
-    message: &Message,
-    galleries: &[InputGallery],
-) -> Result<Message> {
+async fn cmd_query(bot: Bot, message: &Message, galleries: &[InputGallery]) -> Result<Message> {
     info!("执行命令: query {:?}", galleries);
     let text = match galleries.len() {
         1 => galleries[0]
@@ -244,7 +232,7 @@ fn is_new_gallery(message: &Message) -> bool {
         .unwrap_or(false)
 }
 
-pub async fn message_handler(message: Message, bot: AutoSend<Bot>) -> Result<()> {
+pub async fn message_handler(message: Message, bot: Bot) -> Result<()> {
     use RuaCommand::*;
 
     trace!("{:#?}", message);
@@ -320,7 +308,7 @@ pub async fn message_handler(message: Message, bot: AutoSend<Bot>) -> Result<()>
         tokio::spawn(async move {
             sleep(time::Duration::from_secs(300)).await;
             for id in to_delete {
-                info!("清除消息 {}", id);
+                info!("清除消息 {:?}", id);
                 bot.delete_message(chat_id, id).await.log_on_error().await;
             }
         });
@@ -328,7 +316,7 @@ pub async fn message_handler(message: Message, bot: AutoSend<Bot>) -> Result<()>
     Ok(())
 }
 
-pub async fn poll_handler(poll: Poll, _bot: AutoSend<Bot>) -> Result<()> {
+pub async fn poll_handler(poll: Poll, _bot: Bot) -> Result<()> {
     let options = poll.options;
     let votes = options.iter().map(|s| s.voter_count).collect::<Vec<_>>();
     let score = Vote::wilson_score(&votes);
@@ -337,7 +325,7 @@ pub async fn poll_handler(poll: Poll, _bot: AutoSend<Bot>) -> Result<()> {
     DB.update_score(&poll.id, score, votes)
 }
 
-pub async fn inline_handler(query: InlineQuery, bot: AutoSend<Bot>) -> Result<()> {
+pub async fn inline_handler(query: InlineQuery, bot: Bot) -> Result<()> {
     let text = query.query.trim();
     info!("行内查询：{}", text);
     let mut answer = vec![];
@@ -363,13 +351,8 @@ fn split_vec<T: FromStr>(s: &str) -> std::result::Result<Vec<T>, T::Err> {
         .collect::<std::result::Result<Vec<_>, _>>()
 }
 
-async fn callback_change_page(
-    bot: AutoSend<Bot>,
-    message: &Message,
-    cmd: &str,
-    data: &str,
-) -> Result<()> {
-    info!("翻页：{} {}", message.id, cmd);
+async fn callback_change_page(bot: Bot, message: &Message, cmd: &str, data: &str) -> Result<()> {
+    info!("翻页：{:?} {}", message.id, cmd);
     // vec![from, to, offset]
     let data = split_vec::<i64>(data)?;
     let [from, to, mut offset] = match TryInto::<[i64; 3]>::try_into(data) {
@@ -392,12 +375,7 @@ async fn callback_change_page(
     Ok(())
 }
 
-async fn callback_poll(
-    bot: AutoSend<Bot>,
-    message: &Message,
-    user_id: u64,
-    data: &str,
-) -> Result<()> {
+async fn callback_poll(bot: Bot, message: &Message, user_id: u64, data: &str) -> Result<()> {
     let data = split_vec::<i32>(data)?;
     let [poll_id, option] = match TryInto::<[i32; 2]>::try_into(data) {
         Ok(v) => v,
@@ -421,7 +399,7 @@ async fn callback_poll(
     Ok(())
 }
 
-pub async fn callback_handler(callback: CallbackQuery, bot: AutoSend<Bot>) -> Result<()> {
+pub async fn callback_handler(callback: CallbackQuery, bot: Bot) -> Result<()> {
     debug!("回调：{:?}", callback.data);
 
     if let Some(d) = LIMIT.insert(callback.from.id.0) {

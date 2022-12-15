@@ -60,7 +60,7 @@ impl MessageExt for Message {
 
 // TODO: 缓存
 /// 获取管理员列表
-async fn get_admins(bot: AutoSend<Bot>) -> Option<Vec<User>> {
+async fn get_admins(bot: Bot) -> Option<Vec<User>> {
     let mut admins = bot
         .get_chat_administrators(CONFIG.telegram.channel_id.clone())
         .await
@@ -74,7 +74,7 @@ async fn get_admins(bot: AutoSend<Bot>) -> Option<Vec<User>> {
 }
 
 // 检测是否是指定频道的管理员
-pub async fn check_is_channel_admin(bot: AutoSend<Bot>, message: &Message) -> (bool, bool) {
+pub async fn check_is_channel_admin(bot: Bot, message: &Message) -> (bool, bool) {
     // 先检测是否为匿名管理员
     let from_user = message.from();
     if from_user

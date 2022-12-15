@@ -73,11 +73,7 @@ pub enum RuaCommand {
 
 impl RuaCommand {
     /// 将消息解析为命令
-    pub async fn parse(
-        bot: AutoSend<Bot>,
-        message: &Message,
-        bot_id: &str,
-    ) -> Result<Self, CommandError> {
+    pub async fn parse(bot: Bot, message: &Message, bot_id: &str) -> Result<Self, CommandError> {
         use CommandError::*;
 
         let text = message.text().unwrap_or("");
