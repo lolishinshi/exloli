@@ -113,7 +113,7 @@ impl RuaCommand {
                     true => Err(WrongCommand("用法：/uptag [回复|画廊地址|消息地址]...")),
                 }
             }
-            ("reupload", true, _) => {
+            ("reupload", _, _) => {
                 let arg = get_input_gallery(message, args);
                 match arg.is_empty() {
                     false => Ok(Self::ReUpload(arg)),

@@ -165,6 +165,13 @@ impl ExLoli {
         republish: bool,
     ) -> Result<()> {
         info!("更新画廊：{}", ogallery.get_url());
+        if republish {
+            let resp = reqwest::get(&ogallery.telegraph).await?;
+            if resp.status().as_u16() != 404 {
+                return Ok(());
+            }
+        }
+
         let gallery = match gallery {
             Some(v) => v,
             None => {
