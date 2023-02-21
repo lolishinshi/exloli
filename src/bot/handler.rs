@@ -105,12 +105,17 @@ async fn cmd_upload(bot: Bot, message: &Message, urls: &[String]) -> Result<Mess
     .await
 }
 
-async fn cmd_reupload(bot: Bot, message: &Message, old_gallery: &InputGallery) -> Result<Message> {
+async fn cmd_reupload(bot: Bot, message: &Message, old_gallery: &[InputGallery]) -> Result<Message> {
     info!("执行命令: reupload {:?}", old_gallery);
     let mut text = "收到命令，执行中……".to_owned();
     let reply_message = reply_to!(bot, message, &text).await?;
-    let gallery = old_gallery.to_gallery().await?;
-    EXLOLI.update_gallery(&gallery, None, true).await?;
+
+    for gallery in old_gallery {
+        if let InputGallery::Gallery(gallery) = gallery {
+            EXLOLI.update_gallery(&gallery, None, true).await?;
+        }
+    }
+
     text.push_str("\n执行完毕");
     Ok(bot
         .edit_message_text(reply_message.chat.id, reply_message.id, text)
