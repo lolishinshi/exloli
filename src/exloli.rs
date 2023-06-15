@@ -1,4 +1,5 @@
 use crate::database::Gallery;
+use crate::ehentai::EHentaiClient;
 use crate::exhentai::*;
 use crate::utils::*;
 use crate::{BOT, CONFIG, DB};
@@ -12,6 +13,7 @@ use v_htmlescape::escape;
 
 pub struct ExLoli {
     telegraph: Telegraph,
+    ehentai: EHentaiClient,
 }
 
 impl ExLoli {
@@ -23,7 +25,7 @@ impl ExLoli {
     /// 根据配置文件自动扫描并上传本子
     pub async fn scan_and_upload(&self) -> Result<()> {
         // 筛选最新本子
-        let page_limit = CONFIG.exhentai.max_pages;
+        let page_limit = CONFIG.exhentai.search_pages;
         let galleries = EXHENTAI.search_n_pages(page_limit).await?;
 
         // 从后往前爬, 保持顺序

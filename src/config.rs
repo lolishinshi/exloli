@@ -19,15 +19,10 @@ pub struct Config {
 
 #[derive(Debug, Deserialize)]
 pub struct ExHentai {
-    pub username: String,
-    pub password: String,
     pub cookie: Option<String>,
-    pub search_url: Url,
     pub search_params: Vec<(String, String)>,
-    pub max_pages: i32,
-    pub max_img_cnt: usize,
-    pub outdate: Option<i64>,
-    pub proxy: Option<String>,
+    pub search_pages: i32,
+    pub outdate: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -35,7 +30,6 @@ pub struct Telegraph {
     pub access_token: String,
     pub author_name: String,
     pub author_url: String,
-    pub proxy: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -44,7 +38,6 @@ pub struct Telegram {
     pub bot_id: String,
     pub token: String,
     pub group_id: ChatId,
-    pub trusted_users: Vec<String>,
 }
 
 impl Config {

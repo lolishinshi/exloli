@@ -8,6 +8,8 @@ use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::sql_types::Float;
 use diesel::sqlite::Sqlite;
+use futures::executor::block_on;
+use once_cell::sync::Lazy;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 use sqlx::SqlitePool;
 use std::env;
@@ -268,9 +270,7 @@ impl Gallery {
     }
 }
 
-pub type DbConnection = SqlitePool;
-
-pub async fn get_connection_pool(url: &str) -> DbConnection {
+pub async fn get_connection_pool(url: &str) -> SqlitePool {
     let options = SqliteConnectOptions::new()
         .journal_mode(SqliteJournalMode::Wal)
         .synchronous(SqliteSynchronous::Normal)
@@ -287,3 +287,8 @@ pub async fn get_connection_pool(url: &str) -> DbConnection {
         .expect("数据库迁移失败");
     pool
 }
+
+pub static DB: Lazy<SqlitePool> = Lazy::new(|| {
+    let url = env::var("DATABASE_URL").expect("数据库连接字符串未设置");
+    block_on(get_connection_pool(&url))
+});

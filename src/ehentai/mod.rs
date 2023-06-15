@@ -1,4 +1,4 @@
 mod client;
-mod types;
+mod gallery;
 
 pub use client::EHentaiClient;

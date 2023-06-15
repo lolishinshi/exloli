@@ -1,6 +1,10 @@
+use crate::ehentai::EHentaiClient;
+use reqwest::Client;
+
 /// 画廊信息
 #[derive(Debug)]
 pub struct Gallery {
+    pub(super) client: EHentaiClient,
     /// 画廊标题
     pub title: String,
     /// 画廊日文标题
@@ -12,5 +16,5 @@ pub struct Gallery {
     /// 标签
     pub tags: Vec<(String, Vec<String>)>,
     /// 图片页面的地址
-    pub images: Vec<String>,
+    pub pages: Vec<String>,
 }

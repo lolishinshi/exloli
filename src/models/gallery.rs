@@ -1,6 +1,7 @@
+use crate::database::DB;
 use chrono::{NaiveDate, NaiveDateTime};
 use sqlx::sqlite::SqliteQueryResult;
-use sqlx::{Error, SqlitePool};
+use sqlx::Error;
 
 #[derive(sqlx::FromRow, Debug)]
 pub struct Gallery {
@@ -17,15 +18,21 @@ pub struct Gallery {
 }
 
 impl Gallery {
-    pub async fn upsert(&self, conn: &SqlitePool) -> Result<SqliteQueryResult, Error> {
-        sqlx::query(
-            "INSERT INTO gallery (id, token, title, tags) VALUES (?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET token = ?, title = ?, tags = ?",
-        )
-        .bind(&self.id)
-        .bind(&self.token)
-        .bind(&self.title)
-        .bind(&self.tags)
-        .execute(conn)
-        .await
+    pub async fn upsert(&self) -> Result<SqliteQueryResult, Error> {
+        sqlx::query("REPLACE INTO gallery (id, token, title, tags, parent) VALUES (?, ?, ?, ?, ?)")
+            .bind(&self.id)
+            .bind(&self.token)
+            .bind(&self.title)
+            .bind(&self.tags)
+            .bind(&self.parent)
+            .execute(&*DB)
+            .await
+    }
+
+    pub async fn fetch_by_id(id: i32) -> Result<Option<Self>, Error> {
+        sqlx::query_as("SELECT * FROM gallery WHERE id = ?")
+            .bind(id)
+            .fetch_optional(&*DB)
+            .await
     }
 }

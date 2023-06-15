@@ -1,9 +1,10 @@
+use crate::ehentai::gallery::Gallery;
+use crate::xpath::parse_html;
 use anyhow::Result;
 use reqwest::header::*;
 use reqwest::{Client, Response};
+use std::sync::Arc;
 use std::time::Duration;
-use crate::ehentai::types::Gallery;
-use crate::xpath::parse_html;
 
 macro_rules! send {
     ($e:expr) => {
@@ -30,12 +31,12 @@ const DEFAULT_HEADERS: [(HeaderName, &'static str); 9] = [
     ),
 ];
 
-pub struct EHentaiClient {
-    client: Client,
-}
+#[derive(Debug, Clone)]
+pub struct EHentaiClient(Arc<Client>);
 
 impl EHentaiClient {
     pub async fn new(cookie: String) -> Result<Self> {
+        info!("初始化 EHentaiClient");
         let mut headers = DEFAULT_HEADERS
             .iter()
             .map(|(k, v)| (k.clone(), v.parse().unwrap()))
@@ -51,13 +52,20 @@ impl EHentaiClient {
         let _response = send!(client.get("https://exhentai.org/uconfig.php"))?;
         let _response = send!(client.get("https://exhentai.org/mytags"))?;
 
-        Ok(Self { client })
+        Ok(Self(Arc::new(client)))
     }
 
     /// 使用指定参数查询符合要求的画廊列表
-    pub async fn search(&self, params: &[(&str, &str)], page: i32) -> Result<Vec<(String, String)>> {
+    ///
+    /// 返回画廊标题和画廊地址
+    pub async fn search(
+        &self,
+        params: &[(&str, &str)],
+        page: i32,
+    ) -> Result<Vec<(String, String)>> {
+        info!("搜索：{:?} {}", params, page);
         let resp = send!(self
-            .client
+            .0
             .get("https://exhentai.org")
             .query(params)
             .query(&[("page", &page.to_string())]))?;
@@ -83,8 +91,8 @@ impl EHentaiClient {
     }
 
     /// 根据画廊 URL 获取画廊的完整信息
-    pub async fn gallery(&self, url: &str) -> Result<Gallery> {
-        let resp = send!(self.client.get(url))?;
+    pub async fn get_gallery(&self, url: &str) -> Result<Gallery> {
+        let resp = send!(self.0.get(url))?;
         let mut html = parse_html(resp.text().await?)?;
 
         // 标题
@@ -116,24 +124,25 @@ impl EHentaiClient {
         // 图片列表
         let mut images = html.xpath_text(r#"//div[@id="gdt"]//a/@href"#)?;
         while let Ok(next_page) = html.xpath_text(r#"//table[@class="ptt"]//td[last()]/a/@href"#) {
-            let resp = send!(self.client.get(&next_page[0]))?;
+            let resp = send!(self.0.get(&next_page[0]))?;
             html = parse_html(resp.text().await?)?;
             images.extend(html.xpath_text(r#"//div[@id="gdt"]//a/@href"#)?);
         }
 
         Ok(Gallery {
+            client: self.clone(),
             title,
             title_jp,
             url: url.to_string(),
             parent,
             tags,
-            images
+            pages: images,
         })
     }
 
     /// 根据图片页面的 URL 解析出真实的图片地址
-    pub async fn image(&self, url: &str) -> Result<String> {
-        let resp = send!(self.client.get(url))?;
+    pub async fn get_image_url(&self, url: &str) -> Result<String> {
+        let resp = send!(self.0.get(url))?;
         let url = parse_html(resp.text().await?)?
             .xpath_text(r#"//img[@id="img"]/@src"#)?
             .swap_remove(0);

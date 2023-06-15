@@ -24,7 +24,7 @@ use std::time;
 mod bot;
 mod config;
 mod database;
-//mod ehentai;
+mod ehentai;
 mod exhentai;
 mod exloli;
 mod models;
