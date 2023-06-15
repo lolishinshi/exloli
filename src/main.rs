@@ -27,6 +27,7 @@ mod database;
 //mod ehentai;
 mod exhentai;
 mod exloli;
+mod models;
 mod schema;
 mod trans;
 mod utils;

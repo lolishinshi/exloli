@@ -117,9 +117,7 @@ impl RuaCommand {
                 let arg = get_input_gallery(message, args);
                 match arg.is_empty() {
                     false => Ok(Self::ReUpload(arg)),
-                    true => Err(WrongCommand(
-                        "用法：/reupload [回复|消息地址]...",
-                    )),
+                    true => Err(WrongCommand("用法：/reupload [回复|消息地址]...")),
                 }
             }
             ("delete", true, _) => {

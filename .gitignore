@@ -4,4 +4,4 @@
 config.toml
 db
 backup
-db.sqlite
+db.sqlite*

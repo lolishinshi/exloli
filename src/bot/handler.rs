@@ -105,7 +105,11 @@ async fn cmd_upload(bot: Bot, message: &Message, urls: &[String]) -> Result<Mess
     .await
 }
 
-async fn cmd_reupload(bot: Bot, message: &Message, old_gallery: &[InputGallery]) -> Result<Message> {
+async fn cmd_reupload(
+    bot: Bot,
+    message: &Message,
+    old_gallery: &[InputGallery],
+) -> Result<Message> {
     info!("执行命令: reupload {:?}", old_gallery);
     let mut text = "收到命令，执行中……".to_owned();
     let reply_message = reply_to!(bot, message, &text).await?;

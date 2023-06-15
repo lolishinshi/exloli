@@ -6,10 +6,13 @@ use chrono::prelude::*;
 use diesel::dsl::sql;
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool};
+use diesel::sql_types::Float;
 use diesel::sqlite::Sqlite;
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
+use sqlx::SqlitePool;
 use std::env;
 
-embed_migrations!("migrations");
+//embed_migrations!("migrations");
 
 #[derive(Queryable, Insertable, PartialEq, Debug, Clone)]
 #[table_name = "gallery"]
@@ -54,7 +57,7 @@ impl DataBase {
             .max_size(16)
             .build(manager)
             .expect("连接池建立失败");
-        embedded_migrations::run_with_output(&pool.get()?, &mut std::io::stdout())?;
+        //embedded_migrations::run_with_output(&pool.get()?, &mut std::io::stdout())?;
         Ok(Self { pool })
     }
 
@@ -66,7 +69,7 @@ impl DataBase {
         };
         diesel::insert_or_ignore_into(image_hash::table)
             .values(&img)
-            .execute(&self.pool.get()?)?;
+            .execute(&mut self.pool.get()?)?;
         Ok(())
     }
 
@@ -74,7 +77,7 @@ impl DataBase {
         let hash = get_hash_from_image(image_url).context("无法提取图片 hash")?;
         Ok(image_hash::table
             .filter(image_hash::hash.eq(hash))
-            .get_result::<ImageHash>(&self.pool.get()?)?
+            .get_result::<ImageHash>(&mut self.pool.get()?)?
             .url)
     }
 
@@ -82,7 +85,7 @@ impl DataBase {
         let fileindex = get_id_from_image(image_url).context("无法提取图片 fileindex")?;
         Ok(images::table
             .filter(images::fileindex.eq(fileindex))
-            .get_result::<Image>(&self.pool.get()?)?
+            .get_result::<Image>(&mut self.pool.get()?)?
             .url)
     }
 
@@ -109,7 +112,7 @@ impl DataBase {
         };
         diesel::insert_into(gallery::table)
             .values(&gallery)
-            .execute(&self.pool.get()?)?;
+            .execute(&mut self.pool.get()?)?;
         Ok(())
     }
 
@@ -134,7 +137,7 @@ impl DataBase {
                 gallery::tags.eq(serde_json::to_string(&info.tags)?),
                 gallery::upload_images.eq(upload_images as i16),
             ))
-            .execute(&self.pool.get()?)?;
+            .execute(&mut self.pool.get()?)?;
         Ok(())
     }
 
@@ -143,7 +146,7 @@ impl DataBase {
         diesel::update(gallery::table)
             .filter(gallery::message_id.eq(message_id))
             .set(gallery::score.eq(-1.0))
-            .execute(&self.pool.get()?)?;
+            .execute(&mut self.pool.get()?)?;
         Ok(())
     }
 
@@ -151,7 +154,7 @@ impl DataBase {
     pub fn real_delete_gallery(&self, message_id: i32) -> Result<()> {
         diesel::delete(gallery::table)
             .filter(gallery::message_id.eq(message_id))
-            .execute(&self.pool.get()?)?;
+            .execute(&mut self.pool.get()?)?;
         Ok(())
     }
 
@@ -163,43 +166,44 @@ impl DataBase {
         to: NaiveDate,
         mut offset: i64,
     ) -> Result<Vec<Gallery>> {
-        let ordering: Box<dyn BoxableExpression<gallery::table, Sqlite, SqlType = ()>> =
-            if offset > 0 {
-                Box::new(gallery::score.desc())
-            } else {
-                offset = -offset;
-                Box::new(gallery::score.asc())
-            };
-        Ok(gallery::table
-            .filter(
-                gallery::publish_date
-                    .ge(to)
-                    .and(gallery::publish_date.le(from))
-                    .and(gallery::score.ne(-1.0))
-                    .and(gallery::poll_id.ne("")),
-            )
-            .order_by((ordering, gallery::publish_date.desc()))
-            .group_by(gallery::poll_id)
-            .offset(offset - 1)
-            .limit(20)
-            .load::<Gallery>(&self.pool.get()?)?)
+        todo!();
+        // let ordering: Box<dyn BoxableExpression<gallery::table, Sqlite, SqlType = ()>> =
+        //     if offset > 0 {
+        //         Box::new(gallery::score.desc())
+        //     } else {
+        //         offset = -offset;
+        //         Box::new(gallery::score.asc())
+        //     };
+        // Ok(gallery::table
+        //     .filter(
+        //         gallery::publish_date
+        //             .ge(to)
+        //             .and(gallery::publish_date.le(from))
+        //             .and(gallery::score.ne(-1.0))
+        //             .and(gallery::poll_id.ne("")),
+        //     )
+        //     .order_by((ordering, gallery::publish_date.desc()))
+        //     .group_by(gallery::poll_id)
+        //     .offset(offset - 1)
+        //     .limit(20)
+        //     .load::<Gallery>(&mut self.pool.get()?)?)
     }
 
     pub fn get_rank(&self, score: f32) -> Result<f32> {
         Ok(gallery::table
             .filter(gallery::poll_id.ne("").and(gallery::score.ge(0.0)))
-            .select(sql(&format!(
+            .select(sql::<Float>(&format!(
                 "sum(IIF(score >= {}, 1., 0.)) / count(*)",
                 score
             )))
-            .get_result::<f32>(&self.pool.get()?)?)
+            .get_result::<f32>(&mut self.pool.get()?)?)
     }
 
     pub fn update_poll_id(&self, message_id: i32, poll_id: &str) -> Result<()> {
         diesel::update(gallery::table)
             .filter(gallery::message_id.eq(message_id))
             .set(gallery::poll_id.eq(poll_id))
-            .execute(&self.pool.get()?)?;
+            .execute(&mut self.pool.get()?)?;
         Ok(())
     }
 
@@ -207,7 +211,7 @@ impl DataBase {
         Ok(gallery::table
             .filter(gallery::message_id.eq(message_id))
             .select(gallery::poll_id)
-            .get_result::<String>(&self.pool.get()?)?)
+            .get_result::<String>(&mut self.pool.get()?)?)
     }
 
     pub fn insert_vote(&self, user_id: u64, poll_id: i32, option: i32) -> Result<()> {
@@ -218,7 +222,7 @@ impl DataBase {
                 user_vote::option.eq(option),
                 user_vote::vote_time.eq(Utc::now().naive_utc()),
             )])
-            .execute(&*self.pool.get()?)?;
+            .execute(&mut self.pool.get()?)?;
         Ok(())
     }
 
@@ -227,7 +231,7 @@ impl DataBase {
         let options = user_vote::table
             .select(user_vote::option)
             .filter(user_vote::poll_id.eq(poll_id))
-            .load::<i32>(&self.pool.get()?)?;
+            .load::<i32>(&mut self.pool.get()?)?;
         for i in options {
             ret[i as usize - 1] += 1
         }
@@ -238,7 +242,7 @@ impl DataBase {
         diesel::update(gallery::table)
             .filter(gallery::poll_id.eq(poll_id))
             .set((gallery::score.eq(score), gallery::votes.eq(votes.as_ref())))
-            .execute(&self.pool.get()?)?;
+            .execute(&mut self.pool.get()?)?;
         Ok(())
     }
 
@@ -248,13 +252,13 @@ impl DataBase {
             .filter(gallery::gallery_id.eq(id))
             .order_by(gallery::publish_date.desc())
             .limit(1)
-            .get_result::<Gallery>(&self.pool.get()?)?)
+            .get_result::<Gallery>(&mut self.pool.get()?)?)
     }
 
     pub fn query_gallery(&self, message_id: i32) -> Result<Gallery> {
         Ok(gallery::table
             .filter(gallery::message_id.eq(message_id))
-            .get_result::<Gallery>(&self.pool.get()?)?)
+            .get_result::<Gallery>(&mut self.pool.get()?)?)
     }
 }
 
@@ -262,4 +266,24 @@ impl Gallery {
     pub fn get_url(&self) -> String {
         format!("https://{}/g/{}/{}/", *HOST, self.gallery_id, self.token)
     }
+}
+
+pub type DbConnection = SqlitePool;
+
+pub async fn get_connection_pool(url: &str) -> DbConnection {
+    let options = SqliteConnectOptions::new()
+        .journal_mode(SqliteJournalMode::Wal)
+        .synchronous(SqliteSynchronous::Normal)
+        .foreign_keys(false)
+        .filename(url)
+        .create_if_missing(true);
+    let pool = SqlitePoolOptions::new()
+        .connect_with(options)
+        .await
+        .expect("数据库连接失败");
+    sqlx::migrate!("./migrations")
+        .run(&pool)
+        .await
+        .expect("数据库迁移失败");
+    pool
 }
