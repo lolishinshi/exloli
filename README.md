@@ -1,5 +1,7 @@
 # exloli
 
+**项目转移到 [exloli-next](https://github.com/lolishinshi/exloli-next)**
+
 从 E 站里站下载指定关键词的画(ben)廊(zi)并上传到 Telegraph 并发布到 Telegram 频道
 
 ## 安装
